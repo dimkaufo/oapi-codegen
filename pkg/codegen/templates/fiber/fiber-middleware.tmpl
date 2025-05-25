@@ -1,6 +1,7 @@
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
     Handler ServerInterface
+    BeforeCallHandlers []fiber.Handler
 }
 
 type MiddlewareFunc fiber.Handler
@@ -165,7 +166,7 @@ func (siw *ServerInterfaceWrapper) {{$opid}}(c *fiber.Ctx) error {
   {{end}}
 
   for _, handler := range siw.BeforeCallHandlers {
-    if err := handler(ctx); err != nil {
+    if err := handler(c); err != nil {
       return err
     }
   }
