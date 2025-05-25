@@ -2,7 +2,7 @@
 type FiberServerOptions struct {
     BaseURL string
     Middlewares []MiddlewareFunc
-    BeforeCallHandlers []MiddlewareFunc
+    BeforeCallHandlers []BeforeCallHandlerFunc
 }
 
 // RegisterHandlers creates http.Handler with routing matching OpenAPI spec.
