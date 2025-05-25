@@ -168,12 +168,12 @@ func (siw *ServerInterfaceWrapper) {{$opid}}(c *fiber.Ctx) error {
   {{end}}
 
   for _, handler := range siw.BeforeCallHandlers {
-    if shouldMoveToNext, err := handler(c); err != nil {
-      if !shouldMoveToNext {
-        return nil
-      }
-
+    shouldMoveToNext, err := handler(c);
+    if err != nil {
       return err
+    }
+    if !shouldMoveToNext {
+      return nil
     }
   }
 
