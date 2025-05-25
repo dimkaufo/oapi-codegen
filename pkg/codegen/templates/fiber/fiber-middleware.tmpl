@@ -164,6 +164,12 @@ func (siw *ServerInterfaceWrapper) {{$opid}}(c *fiber.Ctx) error {
     {{end}}
   {{end}}
 
+  for _, handler := range siw.BeforeCallHandlers {
+    if err := handler(ctx); err != nil {
+      return err
+    }
+  }
+
   return siw.Handler.{{.OperationId}}(c{{genParamNames .PathParams}}{{if .RequiresParamObject}}, params{{end}})
 }
 {{end}}
