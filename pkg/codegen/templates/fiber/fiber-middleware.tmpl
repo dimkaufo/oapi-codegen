@@ -1,7 +1,7 @@
 // ServerInterfaceWrapper converts contexts to parameters.
 type ServerInterfaceWrapper struct {
     Handler ServerInterface
-    BeforeCallHandlers []fiber.Handler
+    BeforeCallHandlers []MiddlewareFunc
 }
 
 type MiddlewareFunc fiber.Handler
