@@ -1,5 +1,9 @@
 name: Ensure generated files are up-to-date
 on: [ push, pull_request ]
+
+permissions:
+  contents: read
+
 jobs:
   build:
     name: Build
@@ -12,6 +16,7 @@ jobs:
         - "1.22"
         - "1.23"
         - "1.24"
+        - "1.25"
     steps:
       - name: Check out source code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
