@@ -505,6 +505,8 @@ func generationTargets(cfg *codegen.Configuration, targets []string) error {
 		switch opt {
 		case "iris", "iris-server":
 			opts.IrisServer = true
+		case "strict-hybrid-server":
+			opts.StrictHybrid = true
 		case "chi-server", "chi":
 			opts.ChiServer = true
 		case "fiber-server", "fiber":

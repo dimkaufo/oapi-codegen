@@ -1,0 +1,5 @@
+{{/* Emit type definitions for each operation's primary 2xx JSON response (e.g. CompleteAttachmentUpload200JSONResponse). */}}
+{{range .Types}}
+{{ if .Schema.Description }}{{ toGoComment .Schema.Description .TypeName  }}{{ else }}// {{.TypeName}} defines response body for operation.{{ end }}
+type {{.TypeName}} {{if .IsAlias }}={{end}} {{.Schema.TypeDecl}}
+{{end}}

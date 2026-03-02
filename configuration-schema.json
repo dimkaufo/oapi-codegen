@@ -45,6 +45,10 @@
           "type": "boolean",
           "description": "Strict specifies whether to generate strict server wrapper"
         },
+        "strict-hybrid-server": {
+          "type": "boolean",
+          "description": "When true with fiber-server, generate only StrictHybridServerInterface (typed body, params, response from OpenAPI) and StrictHybridServerInterfaceWrapper. Implement StrictHybridServerInterface and register via RegisterStrictHandlers. Handler sets status code; wrapper only calls .JSON(resp). ServerInterface is not generated."
+        },
         "client": {
           "type": "boolean",
           "description": "Client specifies whether to generate client boilerplate"

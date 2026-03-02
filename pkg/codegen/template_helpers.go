@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"text/template"
 
@@ -88,6 +89,103 @@ func genParamNames(params []ParameterDefinition) string {
 		parts[i] = p.GoVariableName()
 	}
 	return ", " + strings.Join(parts, ", ")
+}
+
+// defaultBodyType returns the Go type name for the default (or first supported) request body
+// for the operation, e.g. "CompleteAttachmentUploadJSONRequestBody". Empty if the operation has no body.
+// Template helper; accepts interface{} for template pipeline (OperationDefinition).
+func defaultBodyType(op interface{}) string {
+	o, ok := op.(OperationDefinition)
+	if !ok {
+		return ""
+	}
+	if len(o.Bodies) == 0 {
+		return ""
+	}
+	// Prefer default (application/json), else first supported
+	var body *RequestBodyDefinition
+	for i := range o.Bodies {
+		if o.Bodies[i].IsSupported() {
+			if o.Bodies[i].Default {
+				body = &o.Bodies[i]
+				break
+			}
+			if body == nil {
+				body = &o.Bodies[i]
+			}
+		}
+	}
+	if body == nil {
+		return ""
+	}
+	td := body.TypeDef(o.OperationId)
+	return td.TypeName
+}
+
+// bodyRequired returns true if the operation's request body is required.
+// Template helper; accepts interface{} for template pipeline (OperationDefinition).
+func bodyRequired(op interface{}) bool {
+	o, ok := op.(OperationDefinition)
+	if !ok {
+		return false
+	}
+	return o.BodyRequired
+}
+
+// primaryResponse returns the first 2xx response with JSON content: type name and status code.
+// Response type name matches ResponseContentDefinition.TypeDef (e.g. OperationId200JSONResponse).
+func primaryResponse(op OperationDefinition) (typeName string, statusCode int) {
+	for _, resp := range op.Responses {
+		code, err := strconv.Atoi(resp.StatusCode)
+		if err != nil || code < 200 || code > 299 {
+			continue
+		}
+		for _, content := range resp.Contents {
+			if content.IsSupported() && content.IsJSON() {
+				return content.TypeDef(op.OperationId, code).TypeName, code
+			}
+		}
+	}
+	return "", 0
+}
+
+// primaryResponseType returns the Go type name for the primary 2xx JSON response,
+// e.g. "CompleteAttachmentUpload200JSONResponse". Empty if the operation has no such response.
+// Template helper; accepts interface{} for template pipeline (OperationDefinition).
+func primaryResponseType(op interface{}) string {
+	o, ok := op.(OperationDefinition)
+	if !ok {
+		return ""
+	}
+	name, _ := primaryResponse(o)
+	return name
+}
+
+// primaryResponseStatus returns the HTTP status code (e.g. 200) for the primary 2xx JSON response.
+// Returns 0 if the operation has no such response. Template helper.
+func primaryResponseStatus(op interface{}) int {
+	o, ok := op.(OperationDefinition)
+	if !ok {
+		return 0
+	}
+	_, code := primaryResponse(o)
+	return code
+}
+
+// hasTypedResponse returns true if the operation has a 2xx response with JSON content
+// (so the strict interface method should return (*ResponseType, error)). Template helper.
+func hasTypedResponse(op interface{}) bool {
+	o, ok := op.(OperationDefinition)
+	if !ok {
+		return false
+	}
+	name, _ := primaryResponse(o)
+	return name != ""
+}
+
+// hasBody returns true if the operation has a supported request body. Template helper.
+func hasBody(op interface{}) bool {
+	return defaultBodyType(op) != ""
 }
 
 // genResponsePayload generates the payload returned at the end of each client request function
@@ -323,6 +421,12 @@ var TemplateFunctions = template.FuncMap{
 	"genParamTypes":              genParamTypes,
 	"genParamNames":              genParamNames,
 	"genParamFmtString":          ReplacePathParamsWithStr,
+	"defaultBodyType":            defaultBodyType,
+	"bodyRequired":               bodyRequired,
+	"primaryResponseType":        primaryResponseType,
+	"primaryResponseStatus":      primaryResponseStatus,
+	"hasTypedResponse":           hasTypedResponse,
+	"hasBody":                    hasBody,
 	"swaggerUriToIrisUri":        SwaggerUriToIrisUri,
 	"swaggerUriToEchoUri":        SwaggerUriToEchoUri,
 	"swaggerUriToFiberUri":       SwaggerUriToFiberUri,

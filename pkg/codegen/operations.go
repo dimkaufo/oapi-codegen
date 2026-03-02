@@ -902,6 +902,32 @@ func GenerateTypeDefsForOperation(op OperationDefinition) []TypeDefinition {
 	return typeDefs
 }
 
+// GenerateStrictHybridResponseTypeDefinitions returns TypeDefinitions for each operation's
+// primary 2xx JSON response (e.g. CompleteAttachmentUpload200JSONResponse). Used when
+// generating Fiber strict-hybrid server so those response types are emitted in the output.
+func GenerateStrictHybridResponseTypeDefinitions(ops []OperationDefinition) []TypeDefinition {
+	var typeDefs []TypeDefinition
+	for _, op := range ops {
+		for _, resp := range op.Responses {
+			code, err := strconv.Atoi(resp.StatusCode)
+			if err != nil || code < 200 || code > 299 {
+				continue
+			}
+			for _, content := range resp.Contents {
+				if !content.IsSupported() || !content.IsJSON() {
+					continue
+				}
+				td := content.TypeDef(op.OperationId, code)
+				typeDefs = append(typeDefs, *td)
+				typeDefs = append(typeDefs, content.Schema.GetAdditionalTypeDefs()...)
+				goto nextOp
+			}
+		}
+	nextOp:
+	}
+	return typeDefs
+}
+
 // GenerateParamsTypes defines the schema for a parameters definition object
 // which encapsulates all the query, header and cookie parameters for an operation.
 func GenerateParamsTypes(op OperationDefinition) []TypeDefinition {
@@ -1001,6 +1027,29 @@ func GenerateChiServer(t *template.Template, operations []OperationDefinition) (
 // all the wrapper functions around our handlers.
 func GenerateFiberServer(t *template.Template, operations []OperationDefinition) (string, error) {
 	return GenerateTemplates([]string{"fiber/fiber-interface.tmpl", "fiber/fiber-middleware.tmpl", "fiber/fiber-handler.tmpl"}, t, operations)
+}
+
+// GenerateFiberStrictHybridServer generates only StrictHybridServerInterface, StrictHybridServerInterfaceWrapper,
+// and RegisterStrictHandlers (no ServerInterface or ServerInterfaceWrapper). Used when strict-hybrid-server is true.
+// Per-operation response types (e.g. CompleteAttachmentUpload200JSONResponse) are emitted in GenerateTypeDefinitions when strictHybridServer is true.
+func GenerateFiberStrictHybridServer(t *template.Template, operations []OperationDefinition) (string, error) {
+	out, err := GenerateTemplates([]string{
+		"fiber/fiber-strict-hybrid-interface.tmpl",
+		"fiber/fiber-strict-hybrid-wrapper.tmpl",
+		"fiber/fiber-strict-hybrid-handler.tmpl",
+	}, t, operations)
+	if err != nil {
+		return "", err
+	}
+	// Emit strict-hybrid response type definitions (e.g. CompleteAttachmentUpload200JSONResponse) so the interface can reference them.
+	responseTypeDefs := GenerateStrictHybridResponseTypeDefinitions(operations)
+	responseTypesOut, err := GenerateTemplates([]string{"fiber/fiber-strict-hybrid-response-types.tmpl"}, t, struct {
+		Types []TypeDefinition
+	}{Types: responseTypeDefs})
+	if err != nil {
+		return "", err
+	}
+	return responseTypesOut + out, nil
 }
 
 // GenerateEchoServer generates all the go code for the ServerInterface as well as

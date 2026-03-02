@@ -120,6 +120,8 @@ type GenerateOptions struct {
 	StdHTTPServer bool `yaml:"std-http-server,omitempty"`
 	// Strict specifies whether to generate strict server wrapper
 	Strict bool `yaml:"strict-server,omitempty"`
+	// StrictHybrid when true with fiber-server generates only StrictHybridServerInterface (typed body/params/response from OpenAPI) and StrictHybridServerInterfaceWrapper; no ServerInterface.
+	StrictHybrid bool `yaml:"strict-hybrid-server,omitempty"`
 	// Client specifies whether to generate client boilerplate
 	Client bool `yaml:"client,omitempty"`
 	// Models specifies whether to generate type definitions

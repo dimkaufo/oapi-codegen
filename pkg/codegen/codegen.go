@@ -238,9 +238,16 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 
 	var fiberServerOut string
 	if opts.Generate.FiberServer {
-		fiberServerOut, err = GenerateFiberServer(t, ops)
-		if err != nil {
-			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
+		if opts.Generate.StrictHybrid {
+			fiberServerOut, err = GenerateFiberStrictHybridServer(t, ops)
+			if err != nil {
+				return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
+			}
+		} else {
+			fiberServerOut, err = GenerateFiberServer(t, ops)
+			if err != nil {
+				return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
+			}
 		}
 	}
 
@@ -493,6 +500,9 @@ func GenerateTypeDefinitions(t *template.Template, swagger *openapi3.T, ops []Op
 		}
 		allTypes = append(allTypes, bodyTypes...)
 	}
+
+	// Strict-hybrid response types are emitted via fiber-strict-hybrid-response-types.tmpl
+	// in GenerateFiberStrictHybridServer (prepended to Fiber output), not here.
 
 	// Go through all operations, and add their types to allTypes, so that we can
 	// scan all of them for enums. Operation definitions are handled differently

@@ -1,0 +1,9 @@
+// StrictHybridServerInterface represents handlers with typed request/response from the OpenAPI spec.
+// All types (body, parameters, response) are taken from the spec. When the operation has a response body
+// (e.g. 200 with application/json), the method must return (*ResponseType, error); handler sets status code, wrapper only calls .JSON(resp).
+type StrictHybridServerInterface interface {
+{{range .}}{{.SummaryAsComment }}
+	// ({{.Method}} {{.Path}})
+	{{.OperationId}}(c *fiber.Ctx{{genParamArgs .PathParams}}{{if .RequiresParamObject}}, params {{.OperationId}}Params{{end}}{{if hasBody .}}, body {{if bodyRequired .}}{{defaultBodyType .}}{{else}}*{{defaultBodyType .}}{{end}}{{end}}) {{if hasTypedResponse .}}(*{{primaryResponseType .}}, error){{else}}error{{end}}
+{{end}}
+}

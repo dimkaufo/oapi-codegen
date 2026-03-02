@@ -1,0 +1,27 @@
+// FiberServerOptions provides options for the Fiber server.
+type FiberServerOptions struct {
+	BaseURL            string
+	Middlewares        []MiddlewareFunc
+	BeforeCallHandlers []BeforeCallHandlerFunc
+}
+
+// RegisterStrictHandlers creates routes with typed handlers (StrictHybridServerInterface).
+func RegisterStrictHandlers(router fiber.Router, si StrictHybridServerInterface) {
+	RegisterStrictHandlersWithOptions(router, si, FiberServerOptions{})
+}
+
+// RegisterStrictHandlersWithOptions creates routes with additional options.
+func RegisterStrictHandlersWithOptions(router fiber.Router, si StrictHybridServerInterface, options FiberServerOptions) {
+{{if .}}wrapper := &StrictHybridServerInterfaceWrapper{
+	Handler:            si,
+	BeforeCallHandlers: options.BeforeCallHandlers,
+}
+
+for _, m := range options.Middlewares {
+	router.Use(fiber.Handler(m))
+}
+{{end}}
+{{range .}}
+router.{{.Method | lower | title }}(options.BaseURL+"{{.Path | swaggerUriToFiberUri}}", wrapper.{{.OperationId}})
+{{end}}
+}
