@@ -14,6 +14,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
@@ -323,13 +324,48 @@ func main() {
 		if err := os.MkdirAll(filepath.Dir(opts.OutputFile), 0o755); err != nil {
 			errExit("error unable to create directory: %s\n", err)
 		}
-		err = os.WriteFile(opts.OutputFile, []byte(code), 0o644)
+		// Collapse 2+ consecutive blank lines to one so the output is compact.
+		out := collapseBlankLines([]byte(code))
+		err = os.WriteFile(opts.OutputFile, out, 0o644)
 		if err != nil {
 			errExit("error writing generated code to file: %s\n", err)
+		}
+		// Format generated Go code with gofmt so it matches standard style.
+		if err := runGofmt(opts.OutputFile); err != nil {
+			errExit("error formatting generated code: %s\n", err)
 		}
 	} else {
 		fmt.Print(code)
 	}
+}
+
+// collapseBlankLines replaces 2+ consecutive newlines with at most one blank line (\n\n).
+func collapseBlankLines(b []byte) []byte {
+	var out bytes.Buffer
+	out.Grow(len(b))
+	i := 0
+	for i < len(b) {
+		if b[i] != '\n' {
+			out.WriteByte(b[i])
+			i++
+			continue
+		}
+		out.WriteByte('\n')
+		i++
+		// Skip any further newlines so we keep at most one blank line.
+		for i < len(b) && b[i] == '\n' {
+			i++
+		}
+	}
+	return out.Bytes()
+}
+
+// runGofmt runs "gofmt -w" on the given path. Path must be an existing file.
+func runGofmt(path string) error {
+	cmd := exec.Command("gofmt", "-w", path)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func loadTemplateOverrides(templatesDir string) (map[string]string, error) {

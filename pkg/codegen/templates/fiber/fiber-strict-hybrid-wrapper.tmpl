@@ -11,6 +11,20 @@ type BeforeCallHandlerFunc func(c *fiber.Ctx) (bool, error)
 // MiddlewareFunc is Fiber middleware.
 type MiddlewareFunc fiber.Handler
 
+// runBeforeCallHandlers runs BeforeCallHandlers; returns (false, err) to abort, (false, nil) to stop, (true, nil) to continue.
+func (siw *StrictHybridServerInterfaceWrapper) runBeforeCallHandlers(c *fiber.Ctx) (bool, error) {
+	for _, handler := range siw.BeforeCallHandlers {
+		shouldMoveToNext, err := handler(c)
+		if err != nil {
+			return false, err
+		}
+		if !shouldMoveToNext {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
 {{range .}}{{$opid := .OperationId}}
 
 // {{$opid}} operation wrapper
@@ -187,22 +201,17 @@ func (siw *StrictHybridServerInterfaceWrapper) {{$opid}}(c *fiber.Ctx) error {
     {{end}}
   {{end}}
 
-  for _, handler := range siw.BeforeCallHandlers {
-    shouldMoveToNext, err := handler(c)
-    if err != nil {
-      return err
-    }
-    if !shouldMoveToNext {
-      return nil
-    }
+  if ok, err := siw.runBeforeCallHandlers(c); !ok {
+    return err
   }
 
   {{if hasTypedResponse .}}
-  resp, err := siw.Handler.{{.OperationId}}(c{{genParamNames .PathParams}}{{if .RequiresParamObject}}, params{{end}}{{if hasBody .}}, body{{end}})
-  if err != nil {
-    return err
-  }
-  return c.JSON(resp)
+  {{if or .RequiresParamObject (gt (len .PathParams) 0) (hasBody .) }}
+  _, err = siw.Handler.{{.OperationId}}(c{{genParamNames .PathParams}}{{if .RequiresParamObject}}, params{{end}}{{if hasBody .}}, body{{end}})
+  {{else}}
+  _, err := siw.Handler.{{.OperationId}}(c{{genParamNames .PathParams}}{{if .RequiresParamObject}}, params{{end}}{{if hasBody .}}, body{{end}})
+  {{end}}
+  return err
   {{else}}
   {{if hasBody .}}
   return siw.Handler.{{.OperationId}}(c{{genParamNames .PathParams}}{{if .RequiresParamObject}}, params{{end}}, body)
