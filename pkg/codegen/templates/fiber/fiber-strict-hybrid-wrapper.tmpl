@@ -73,9 +73,11 @@ func (siw *StrictHybridServerInterfaceWrapper) {{$opid}}(c *fiber.Ctx) error {
   {{end}}
 {{end}}
 
+{{if opts.Compatibility.EnableAuthScopesOnContext -}}
 {{range .SecurityDefinitions}}
-  c.Context().SetUserValue({{.ProviderName | ucFirst}}Scopes, {{toStringArray .Scopes}})
+  c.Context().SetUserValue({{.ProviderName | sanitizeGoIdentity | ucFirst}}Scopes, {{toStringArray .Scopes}})
 {{end}}
+{{- end}}
 
   {{if .RequiresParamObject}}
     var params {{.OperationId}}Params
