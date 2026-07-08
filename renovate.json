@@ -53,10 +53,12 @@
 			"enabled": false
 		},
 		{
-			"description": "",
+			"description": "Run `make tidy` after updates to Go modules",
 			"matchFileNames": [
+				"go.mod",
+				"go.sum",
 				"**/*/go.mod",
-				"**/*.go.sum"
+				"**/*/go.sum"
 			],
 			"postUpgradeTasks": {
 				"commands": [
@@ -68,6 +70,20 @@
 				],
 				"executionMode": "branch"
 			}
+		}
+	],
+	"customManagers": [
+		{
+			"customType": "regex",
+			"managerFilePatterns": [
+				"README.md",
+				"docs/*.md"
+			],
+			"matchStrings": [
+				"# yaml-language-server: \\$schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/(?<currentValue>[^/]+)/configuration-schema.json"
+			],
+			"depNameTemplate": "github.com/oapi-codegen/oapi-codegen/v2",
+			"datasourceTemplate": "go"
 		}
 	]
 }

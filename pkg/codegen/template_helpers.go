@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"text/template"
@@ -25,7 +26,8 @@ import (
 	"golang.org/x/text/language"
 
 	"github.com/getkin/kin-openapi/openapi3"
-	"github.com/oapi-codegen/oapi-codegen/v2/pkg/util"
+
+	"github.com/dimkaufo/oapi-codegen/v2/pkg/util"
 )
 
 const (
@@ -245,7 +247,7 @@ func genResponseUnmarshal(op *OperationDefinition) string {
 		SortedMapKeys := SortedMapKeys(responseRef.Value.Content)
 		jsonCount := 0
 		for _, contentTypeName := range SortedMapKeys {
-			if StringInArray(contentTypeName, contentTypesJSON) || util.IsMediaTypeJson(contentTypeName) {
+			if slices.Contains(contentTypesJSON, contentTypeName) || util.IsMediaTypeJson(contentTypeName) {
 				jsonCount++
 			}
 		}
@@ -262,7 +264,7 @@ func genResponseUnmarshal(op *OperationDefinition) string {
 			switch {
 
 			// JSON:
-			case StringInArray(contentTypeName, contentTypesJSON) || util.IsMediaTypeJson(contentTypeName):
+			case slices.Contains(contentTypesJSON, contentTypeName) || util.IsMediaTypeJson(contentTypeName):
 				if typeDefinition.ContentTypeName == contentTypeName {
 					caseAction := fmt.Sprintf("var dest %s\n"+
 						"if err := json.Unmarshal(bodyBytes, &dest); err != nil { \n"+
@@ -282,7 +284,7 @@ func genResponseUnmarshal(op *OperationDefinition) string {
 				}
 
 			// YAML:
-			case StringInArray(contentTypeName, contentTypesYAML):
+			case slices.Contains(contentTypesYAML, contentTypeName):
 				if typeDefinition.ContentTypeName == contentTypeName {
 					caseAction := fmt.Sprintf("var dest %s\n"+
 						"if err := yaml.Unmarshal(bodyBytes, &dest); err != nil { \n"+
@@ -296,7 +298,7 @@ func genResponseUnmarshal(op *OperationDefinition) string {
 				}
 
 			// XML:
-			case StringInArray(contentTypeName, contentTypesXML):
+			case slices.Contains(contentTypesXML, contentTypeName):
 				if typeDefinition.ContentTypeName == contentTypeName {
 					caseAction := fmt.Sprintf("var dest %s\n"+
 						"if err := xml.Unmarshal(bodyBytes, &dest); err != nil { \n"+
@@ -396,8 +398,10 @@ func toStringArray(sarr []string) string {
 	return `[]string{` + s + `}`
 }
 
+// stripNewLines removes newlines so untrusted spec text stays inside a single
+// generated `//` line comment instead of breaking out into real Go source.
 func stripNewLines(s string) string {
-	r := strings.NewReplacer("\n", "")
+	r := strings.NewReplacer("\n", "", "\r", "")
 	return r.Replace(s)
 }
 
@@ -405,6 +409,13 @@ func stripNewLines(s string) string {
 //
 // goTypePrefix is the prefix being used to create underlying types in the template (likely the `ServerObjectDefinition.GoName`)
 // variables are this `ServerObjectDefinition`'s variables for the Server object (likely the `ServerObjectDefinition.OAPISchema`)
+//
+// Undeclared `{name}` placeholders that appear in the URL but have no
+// entry in `variables` are NOT handled here; they're emitted as plain
+// `string` parameters by `ServerObjectDefinition.NewFunctionParams`,
+// which the template calls instead of this helper. Custom
+// `server-urls.tmpl` overrides that still call this helper directly
+// keep their pre-existing two-argument signature.
 func genServerURLWithVariablesFunctionParams(goTypePrefix string, variables map[string]*openapi3.ServerVariable) string {
 	keys := SortedMapKeys(variables)
 
@@ -419,6 +430,31 @@ func genServerURLWithVariablesFunctionParams(goTypePrefix string, variables map[
 		parts[i] = k + " " + variableDefinitionPrefix
 	}
 	return strings.Join(parts, ", ")
+}
+
+// httpMethodConstant converts an HTTP method string (e.g. "GET") to the
+// corresponding Go net/http constant (e.g. "http.MethodGet").
+func httpMethodConstant(method string) string {
+	switch method {
+	case "GET":
+		return "http.MethodGet"
+	case "POST":
+		return "http.MethodPost"
+	case "PUT":
+		return "http.MethodPut"
+	case "DELETE":
+		return "http.MethodDelete"
+	case "PATCH":
+		return "http.MethodPatch"
+	case "HEAD":
+		return "http.MethodHead"
+	case "OPTIONS":
+		return "http.MethodOptions"
+	case "TRACE":
+		return "http.MethodTrace"
+	default:
+		return fmt.Sprintf("%q", method)
+	}
 }
 
 // TemplateFunctions is passed to the template engine, and we can call each
@@ -454,8 +490,10 @@ var TemplateFunctions = template.FuncMap{
 	"title":                      titleCaser.String,
 	"stripNewLines":              stripNewLines,
 	"sanitizeGoIdentity":         SanitizeGoIdentity,
+	"schemaNameToTypeName":       SchemaNameToTypeName,
 	"toGoString":                 StringToGoString,
 	"toGoComment":                StringWithTypeNameToGoComment,
 
 	"genServerURLWithVariablesFunctionParams": genServerURLWithVariablesFunctionParams,
+	"httpMethodConstant":                      httpMethodConstant,
 }
