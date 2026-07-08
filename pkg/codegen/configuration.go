@@ -256,6 +256,14 @@ type OutputOptions struct {
 	IncludeOperationIDs []string `yaml:"include-operation-ids,omitempty"`
 	// Exclude operations that have one of these operation-ids. Ignored when empty.
 	ExcludeOperationIDs []string `yaml:"exclude-operation-ids,omitempty"`
+	// Treat the request body of these operation-ids as an opaque blob: generate no body
+	// parameter and no body decoding, leaving the handler to read the untouched request.
+	// Required when the body must be seen exactly as sent — webhook signature verification
+	// over the raw bytes, passthrough proxying — because decoding and re-encoding a body
+	// does not round-trip. Values match either the operation-id as written in the spec or
+	// the normalized Go name derived from it. Ignored when empty; unknown operation-ids are
+	// ignored, as with include-operation-ids and exclude-operation-ids.
+	RawBodyOperationIDs []string `yaml:"raw-body-operation-ids,omitempty"`
 	// Override built-in templates from user-provided files
 	UserTemplates map[string]string `yaml:"user-templates,omitempty"`
 

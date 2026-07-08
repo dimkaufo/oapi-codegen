@@ -159,6 +159,13 @@
             "type": "string"
           }
         },
+        "raw-body-operation-ids": {
+          "type": "array",
+          "description": "Treat the request body of these operation-ids as an opaque blob: generate no body parameter and no body decoding, leaving the handler to read the untouched request.\nRequired when the body must be seen exactly as sent — webhook signature verification over the raw bytes, passthrough proxying — because decoding and re-encoding a body does not round-trip.\nValues match either the operation-id as written in the spec or the normalized Go name derived from it. Ignored when empty; unknown operation-ids are ignored, as with include-operation-ids and exclude-operation-ids.",
+          "items": {
+            "type": "string"
+          }
+        },
         "user-templates": {
           "type": "object",
           "description": "Override built-in templates from user-provided files",

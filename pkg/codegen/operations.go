@@ -601,6 +601,27 @@ func FilterParameterDefinitionByType(params []ParameterDefinition, in string) []
 	return out
 }
 
+// isRawBodyOperation reports whether the spec operationId is opted in to raw-body
+// generation via output-options.raw-body-operation-ids. Unknown ids are ignored, like
+// include-operation-ids and exclude-operation-ids.
+//
+// Both spellings of the id match: the operationId as written in the spec, and the
+// normalized Go name derived from it. Accepting only one would make the other spelling a
+// silent no-op, and a raw-body opt-in that quietly fails to apply is the failure this
+// option exists to prevent.
+func isRawBodyOperation(specOperationID string) bool {
+	if specOperationID == "" {
+		return false
+	}
+	normalized := nameNormalizer(specOperationID)
+	for _, id := range globalState.options.OutputOptions.RawBodyOperationIDs {
+		if id == specOperationID || id == normalized {
+			return true
+		}
+	}
+	return false
+}
+
 // OperationDefinitions returns all operations for a swagger definition.
 func OperationDefinitions(swagger *openapi3.T, initialismOverrides bool) ([]OperationDefinition, error) {
 	var operations []OperationDefinition
@@ -637,6 +658,9 @@ func OperationDefinitions(swagger *openapi3.T, initialismOverrides bool) ([]Oper
 			}
 			// take a copy of operationId, so we don't modify the underlying spec
 			operationId := op.OperationID
+			// The raw-body opt-in is keyed on the spec's operationId, captured before
+			// normalization rewrites it below.
+			rawBody := isRawBodyOperation(op.OperationID)
 			// We rely on OperationID to generate function names, it's required
 			if operationId == "" {
 				operationId, err = generateDefaultOperationID(opName, requestPath, toCamelCaseFunc)
@@ -679,9 +703,16 @@ func OperationDefinitions(swagger *openapi3.T, initialismOverrides bool) ([]Oper
 				return nil, err
 			}
 
-			bodyDefinitions, typeDefinitions, err := GenerateBodyDefinitions(operationId, op.RequestBody)
-			if err != nil {
-				return nil, fmt.Errorf("error generating body definitions: %w", err)
+			// A raw-body operation contributes no body definition, so no body parameter and
+			// no decoding are generated and the handler receives the request untouched. This
+			// is the same shape the generator already produces for an unsupported media type.
+			var bodyDefinitions []RequestBodyDefinition
+			var typeDefinitions []TypeDefinition
+			if !rawBody {
+				bodyDefinitions, typeDefinitions, err = GenerateBodyDefinitions(operationId, op.RequestBody)
+				if err != nil {
+					return nil, fmt.Errorf("error generating body definitions: %w", err)
+				}
 			}
 
 			ensureExternalRefsInRequestBodyDefinitions(&bodyDefinitions, pathItem.Ref)
