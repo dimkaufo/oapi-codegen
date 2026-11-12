@@ -1402,7 +1402,7 @@ func generateGoSchema(ctx genContext, sref *openapi3.SchemaRef, path []string) (
 			var err error
 			refType, err = RefPathToGoType(sref.Ref)
 			if err != nil {
-				return Schema{}, fmt.Errorf("error turning reference (%s) into a Go type: %s",
+				return Schema{}, fmt.Errorf("error turning reference (%s) into a Go type: %w",
 					sref.Ref, err)
 			}
 		}

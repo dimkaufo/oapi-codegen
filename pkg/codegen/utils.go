@@ -432,6 +432,9 @@ func RefPathToObjName(refPath string) string {
 	return ""
 }
 
+// errUnmappedExternalRef marks a $ref to a document missing from import-mapping.
+var errUnmappedExternalRef = errors.New("external reference not in import-mapping")
+
 // RefPathToGoType takes a $ref value and converts it to a Go typename.
 // #/components/schemas/Foo -> Foo
 // #/components/parameters/Bar -> Bar
@@ -456,7 +459,7 @@ func refPathToGoType(refPath string, local bool) (string, error) {
 	goPkg, ok := globalState.importMapping[remoteComponent]
 
 	if !ok {
-		return "", fmt.Errorf("unrecognized external reference '%s'; please provide the known import for this reference using option --import-mapping", remoteComponent)
+		return "", fmt.Errorf("unrecognized external reference '%s'; please provide the known import for this reference using option --import-mapping: %w", remoteComponent, errUnmappedExternalRef)
 	}
 
 	if goPkg.Path == importMappingCurrentPackage {

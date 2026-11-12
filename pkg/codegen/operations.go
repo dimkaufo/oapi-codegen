@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"bytes"
 	"cmp"
+	"errors"
 	"fmt"
 	"go/ast"
 	"hash/fnv"
@@ -1355,6 +1356,9 @@ func responseSchemaNeedsBodyWrapper(sref *openapi3.SchemaRef, schema Schema, pat
 	return responseSchemaNeedsBodyWrapperSeen(sref, schema, path, embedded, map[string]struct{}{})
 }
 
+// A schema from another document carries refs relative to that document, which
+// this config's import-mapping may not cover (errUnmappedExternalRef). Its Go
+// type is imported, so, as for x-go-type, keep the direct response type.
 func responseSchemaNeedsBodyWrapperSeen(sref *openapi3.SchemaRef, schema Schema, path []string, embedded bool, seenRefs map[string]struct{}) (bool, error) {
 	if goTypeNeedsBodyWrapper(schema.TypeDecl(), embedded) {
 		return true, nil
@@ -1377,6 +1381,9 @@ func responseSchemaNeedsBodyWrapperSeen(sref *openapi3.SchemaRef, schema Schema,
 		resolved.Extensions = combinedSchemaExtensions(sref)
 		resolvedRef := openapi3.NewSchemaRef("", &resolved)
 		resolvedSchema, err := GenerateGoSchema(resolvedRef, path)
+		if errors.Is(err, errUnmappedExternalRef) {
+			return false, nil
+		}
 		if err != nil {
 			return false, fmt.Errorf("generating referenced response schema: %w", err)
 		}
@@ -1395,6 +1402,9 @@ func responseSchemaNeedsBodyWrapperSeen(sref *openapi3.SchemaRef, schema Schema,
 	member, memberSchema, err := loweredToMember(sref.Value, schema.TypeDecl(), func(member *openapi3.SchemaRef) (Schema, error) {
 		return GenerateGoSchema(member, path)
 	})
+	if errors.Is(err, errUnmappedExternalRef) {
+		return false, nil
+	}
 	if err != nil {
 		return false, fmt.Errorf("generating composed response schema: %w", err)
 	}
