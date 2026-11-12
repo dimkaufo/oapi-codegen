@@ -30,7 +30,7 @@ import (
 	"regexp"
 	"runtime/debug"
 	"slices"
-	"sort"
+	"strconv"
 	"strings"
 	"text/template"
 	"time"
@@ -74,6 +74,19 @@ var globalState struct {
 	// streamingContentTypeRegexes are the compiled regexes (defaults + user)
 	// used by ResponseContentDefinition.IsStreamingContentType.
 	streamingContentTypeRegexes []*regexp.Regexp
+	// contentTypeNameTags is the compiled output-options.content-types
+	// mapping, resolving media types to user-configured short names for use
+	// in generated type names. Nil-safe: a nil matcher matches nothing.
+	contentTypeNameTags *contentTypeNameTags
+	// schemaFieldTagGenerator renders struct tags for schema property
+	// fields (defaults + output-options.struct-tags, including the legacy
+	// yaml-tags injection). Built in Generate; lazily built for direct
+	// callers via schemaFieldTagGenerator().
+	schemaFieldTagGenerator *structTagGenerator
+	// paramFieldTagGenerator renders struct tags for path parameter fields
+	// on strict RequestObject structs; identical to the schema generator
+	// except the legacy yaml-tags flag does not apply.
+	paramFieldTagGenerator *structTagGenerator
 }
 
 // goImport represents a go package to be imported in the generated code
@@ -98,7 +111,9 @@ type importMap map[string]goImport
 // We use `-` to indicate that this is a bit of a special case
 const importMappingCurrentPackage = "-"
 
-// GoImports returns a slice of go import statements
+// GoImports returns a slice of go import statements, sorted so that the
+// generated output is deterministic even when it is not passed through gofmt
+// (output-options.skip-fmt), which would otherwise sort the import block.
 func (im importMap) GoImports() []string {
 	goImports := make([]string, 0, len(im))
 	for _, v := range im {
@@ -107,6 +122,7 @@ func (im importMap) GoImports() []string {
 		}
 		goImports = append(goImports, v.String())
 	}
+	slices.Sort(goImports)
 	return goImports
 }
 
@@ -155,6 +171,11 @@ func constructImportMapping(importMapping map[string]string) importMap {
 // the descriptions we've built up above from the schema objects.
 // opts defines
 func Generate(spec *openapi3.T, opts Configuration) (string, error) {
+	// Validate() already rejects these, but Generate is also called directly.
+	if _, err := opts.Compatibility.schemaMergingVersion(); err != nil {
+		return "", fmt.Errorf("invalid `compatibility` configuration: %w", err)
+	}
+
 	// This is global state
 	globalState.options = opts
 	globalState.spec = spec
@@ -166,6 +187,22 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		globalState.typeMapping = DefaultTypeMapping
 	}
 
+	// Build the struct tag generators eagerly so invalid user templates in
+	// output-options.struct-tags are reported as errors instead of being
+	// skipped. Assigning here also resets any state from a prior Generate.
+	schemaTagGen, err := newStructTagGenerator(
+		defaultStructTagsConfig(opts.OutputOptions.EnableYamlTags).Merge(opts.OutputOptions.StructTags))
+	if err != nil {
+		return "", fmt.Errorf("error in output-options.struct-tags: %w", err)
+	}
+	globalState.schemaFieldTagGenerator = schemaTagGen
+	paramTagGen, err := newStructTagGenerator(
+		defaultStructTagsConfig(false).Merge(opts.OutputOptions.StructTags))
+	if err != nil {
+		return "", fmt.Errorf("error in output-options.struct-tags: %w", err)
+	}
+	globalState.paramFieldTagGenerator = paramTagGen
+
 	filterOperationsByTag(spec, opts)
 	filterOperationsByOperationID(spec, opts)
 	if !opts.OutputOptions.SkipPrune {
@@ -176,8 +213,13 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 	// (names, media types, enum values, extension hints containing quotes,
 	// backticks, or control characters). Run after filtering/pruning so only
 	// values that will actually be emitted are considered.
-	if err := ValidateSpec(spec); err != nil {
+	if err := validateSpec(spec, allOfMergesUnions()); err != nil {
 		return "", err
+	}
+	if opts.Generate.StdHTTPServer {
+		if err := ValidateStdHTTPPaths(spec); err != nil {
+			return "", err
+		}
 	}
 
 	// if we are provided an override for the response type suffix update it
@@ -209,6 +251,14 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		return "", err
 	}
 	globalState.streamingContentTypeRegexes = streamingRegexes
+
+	// Compile the content-types short name mapping. Validate() already caught
+	// syntax errors, but surface any regression here too.
+	contentTypeTags, err := compileContentTypeNameTags(opts.OutputOptions.ContentTypes)
+	if err != nil {
+		return "", err
+	}
+	globalState.contentTypeNameTags = contentTypeTags
 
 	// Multi-pass name resolution: gather all schemas, then resolve names globally.
 	// Only enabled when resolve-type-name-collisions is set.
@@ -255,6 +305,16 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("error parsing user-provided template %q: %w", name, err)
 		}
+	}
+
+	// Build per-framework clones of the base tree, layering each framework's
+	// hook overrides over the shared server-*.tmpl skeletons. Must happen after
+	// user templates are parsed (so user overrides propagate into the clones)
+	// and before any template is executed (Clone forbids cloning an executed
+	// tree).
+	serverTemplates, err := buildServerTemplates(templates, t)
+	if err != nil {
+		return "", fmt.Errorf("error building per-framework server templates: %w", err)
 	}
 
 	ops, err := OperationDefinitions(spec)
@@ -312,12 +372,15 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("error collecting operation types: %w", err)
 		}
+		if err := checkOperationTypeNames(componentTypes, allOps); err != nil {
+			return "", fmt.Errorf("error generating code for type definitions: %w", err)
+		}
 		opDecls, err := GenerateTypesForOperations(t, allOps)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go types for operations: %w", err)
 		}
 
-		constantDefinitions, err = GenerateConstants(t, allOps)
+		constantDefinitions, err = GenerateConstants(t, spec)
 		if err != nil {
 			return "", fmt.Errorf("error generating constants: %w", err)
 		}
@@ -349,6 +412,9 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		// `const ( … )` block, and `Valid()` method. We do this here
 		// (rather than in collectComponentTypes) so the types are
 		// emitted even when `generate.models` is disabled.
+		if err := ValidateServerURLs(spec); err != nil {
+			return "", err
+		}
 		serverURLEnumTypes, err := BuildServerURLTypeDefinitions(spec)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go types for server URL variables: %w", err)
@@ -372,7 +438,7 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 
 	var irisServerOut string
 	if opts.Generate.IrisServer {
-		irisServerOut, err = GenerateIrisServer(t, ops)
+		irisServerOut, err = GenerateIrisServer(serverTemplates["iris"], ops)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
 		}
@@ -380,7 +446,7 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 
 	var echoServerOut string
 	if opts.Generate.EchoServer {
-		echoServerOut, err = GenerateEchoServer(t, ops)
+		echoServerOut, err = GenerateEchoServer(serverTemplates["echo"], ops)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
 		}
@@ -388,7 +454,7 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 
 	var echo5ServerOut string
 	if opts.Generate.Echo5Server {
-		echo5ServerOut, err = GenerateEcho5Server(t, ops)
+		echo5ServerOut, err = GenerateEcho5Server(serverTemplates["echo5"], ops)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
 		}
@@ -396,7 +462,7 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 
 	var chiServerOut string
 	if opts.Generate.ChiServer {
-		chiServerOut, err = GenerateChiServer(t, ops)
+		chiServerOut, err = GenerateChiServer(serverTemplates["chi"], ops)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
 		}
@@ -405,21 +471,26 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 	var fiberServerOut string
 	if opts.Generate.FiberServer {
 		if opts.Generate.StrictHybrid {
-			fiberServerOut, err = GenerateFiberStrictHybridServer(t, ops)
-			if err != nil {
-				return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
-			}
+			fiberServerOut, err = GenerateFiberStrictHybridServer(serverTemplates["fiber"], ops)
 		} else {
-			fiberServerOut, err = GenerateFiberServer(t, ops)
-			if err != nil {
-				return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
-			}
+			fiberServerOut, err = GenerateFiberServer(serverTemplates["fiber"], ops)
+		}
+		if err != nil {
+			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
+		}
+	}
+
+	var fiberV3ServerOut string
+	if opts.Generate.FiberV3Server {
+		fiberV3ServerOut, err = GenerateFiberV3Server(serverTemplates["fiberv3"], ops)
+		if err != nil {
+			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
 		}
 	}
 
 	var ginServerOut string
 	if opts.Generate.GinServer {
-		ginServerOut, err = GenerateGinServer(t, ops)
+		ginServerOut, err = GenerateGinServer(serverTemplates["gin"], ops)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
 		}
@@ -427,7 +498,7 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 
 	var gorillaServerOut string
 	if opts.Generate.GorillaServer {
-		gorillaServerOut, err = GenerateGorillaServer(t, ops)
+		gorillaServerOut, err = GenerateGorillaServer(serverTemplates["gorilla"], ops)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
 		}
@@ -454,7 +525,7 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		if err != nil {
 			return "", fmt.Errorf("error generation response definitions for schema: %w", err)
 		}
-		strictServerOut, err = GenerateStrictServer(t, ops, opts)
+		strictServerOut, err = GenerateStrictServer(t, serverTemplates, ops, opts)
 		if err != nil {
 			return "", fmt.Errorf("error generating Go handlers for Paths: %w", err)
 		}
@@ -556,6 +627,15 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		}
 	}
 
+	// Webhook receiver (fiber v3) -- (c fiber.Ctx) error signature.
+	var fiberV3WebhookReceiverOut string
+	if opts.Generate.FiberV3Server && len(webhookOps) > 0 {
+		fiberV3WebhookReceiverOut, err = GenerateFiberV3Receiver(t, "Webhook", webhookOps)
+		if err != nil {
+			return "", fmt.Errorf("error generating fiber v3 webhook receiver: %w", err)
+		}
+	}
+
 	// Webhook receiver (iris) -- (ctx iris.Context) signature.
 	var irisWebhookReceiverOut string
 	if opts.Generate.IrisServer && len(webhookOps) > 0 {
@@ -638,6 +718,15 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		fiberCallbackReceiverOut, err = GenerateFiberReceiver(t, "Callback", callbackOps)
 		if err != nil {
 			return "", fmt.Errorf("error generating fiber callback receiver: %w", err)
+		}
+	}
+
+	// Callback receiver (fiber v3).
+	var fiberV3CallbackReceiverOut string
+	if opts.Generate.FiberV3Server && len(callbackOps) > 0 {
+		fiberV3CallbackReceiverOut, err = GenerateFiberV3Receiver(t, "Callback", callbackOps)
+		if err != nil {
+			return "", fmt.Errorf("error generating fiber v3 callback receiver: %w", err)
 		}
 	}
 
@@ -810,6 +899,25 @@ func Generate(spec *openapi3.T, opts Configuration) (string, error) {
 		}
 	}
 
+	if opts.Generate.FiberV3Server {
+		_, err = w.WriteString(fiberV3ServerOut)
+		if err != nil {
+			return "", fmt.Errorf("error writing server path handlers: %w", err)
+		}
+		if fiberV3WebhookReceiverOut != "" {
+			_, err = w.WriteString(fiberV3WebhookReceiverOut)
+			if err != nil {
+				return "", fmt.Errorf("error writing fiber v3 webhook receiver: %w", err)
+			}
+		}
+		if fiberV3CallbackReceiverOut != "" {
+			_, err = w.WriteString(fiberV3CallbackReceiverOut)
+			if err != nil {
+				return "", fmt.Errorf("error writing fiber v3 callback receiver: %w", err)
+			}
+		}
+	}
+
 	if opts.Generate.GinServer {
 		_, err = w.WriteString(ginServerOut)
 		if err != nil {
@@ -973,6 +1081,26 @@ func collectOperationTypes(ops []OperationDefinition) ([]TypeDefinition, error) 
 	return out, nil
 }
 
+// checkOperationTypeNames reports a type declared for an operation (its
+// parameters, bodies and the types hoisted out of them) under the same name as
+// a component type. Both are declared at package level, so the generated code
+// would not compile.
+func checkOperationTypeNames(componentTypes []TypeDefinition, ops []OperationDefinition) error {
+	names := make(map[string]bool, len(componentTypes))
+	for _, td := range componentTypes {
+		names[td.TypeName] = true
+	}
+	for _, op := range ops {
+		for _, td := range op.TypeDefinitions {
+			if names[td.TypeName] {
+				return fmt.Errorf("duplicate typename '%s' detected: operation %s declares it, and so does a component; "+
+					"please use x-go-name to rename one of them", td.TypeName, op.OperationId)
+			}
+		}
+	}
+	return nil
+}
+
 // renderBoilerplate runs the enum, additionalProperties, union, and
 // union+additionalProperties passes over the union of all emitted types.
 // These passes are "inner" — they emit methods/constants subordinate to
@@ -998,25 +1126,66 @@ func renderBoilerplate(t *template.Template, allEmitted []TypeDefinition) (enums
 }
 
 // GenerateConstants generates operation ids, context keys, paths, etc. to be exported as constants
-func GenerateConstants(t *template.Template, ops []OperationDefinition) (string, error) {
-	constants := Constants{
-		SecuritySchemeProviderNames: []string{},
-	}
+//
+// Scopes constants are derived from components/securitySchemes rather than
+// from the operations' security requirements (which are filtered to defined
+// schemes anyway), so that a spec holding shared definitions with no paths
+// still exports the constants other packages alias via import-mapping.
+func GenerateConstants(t *template.Template, swagger *openapi3.T) (string, error) {
+	var constants Constants
 
-	providerNameMap := map[string]struct{}{}
-	for _, op := range ops {
-		for _, def := range op.SecurityDefinitions {
-			providerName := SanitizeGoIdentity(def.ProviderName)
-			providerNameMap[providerName] = struct{}{}
+	if swagger.Components != nil {
+		for _, schemeName := range SortedSecuritySchemeKeys(swagger.Components.SecuritySchemes) {
+			provider := SecuritySchemeProvider{Name: SanitizeGoIdentity(schemeName)}
+			alias := importedSecuritySchemeScopes(swagger.Components.SecuritySchemes[schemeName].Ref)
+			if alias == securitySchemeScopesConstant(provider.Name) {
+				// The scheme $refs a spec that import-mapping assigns to the
+				// current package under the same name: the sibling config
+				// generating that spec into this package already declares
+				// the constant, so re-declaring it here would collide.
+				continue
+			}
+			provider.ImportedScopes = alias
+			constants.SecuritySchemeProviders = append(constants.SecuritySchemeProviders, provider)
 		}
 	}
 
-	providerNames := slices.Collect(maps.Keys(providerNameMap))
-	sort.Strings(providerNames)
-
-	constants.SecuritySchemeProviderNames = append(constants.SecuritySchemeProviderNames, providerNames...)
-
 	return GenerateTemplates([]string{"constants.tmpl"}, t, constants)
+}
+
+// securitySchemeScopesConstant returns the name of the generated scopes
+// context-key constant for a security scheme name. It must mirror the name
+// construction in constants.tmpl (`sanitizeGoIdentity | ucFirst` + "Scopes").
+func securitySchemeScopesConstant(schemeName string) string {
+	return UppercaseFirstCharacter(SanitizeGoIdentity(schemeName)) + "Scopes"
+}
+
+// importedSecuritySchemeScopes resolves a security scheme's $ref through
+// import-mapping to the scopes constant declared by the package generated
+// from the ref'd document. It returns "" when the scheme must be declared
+// locally: it is defined inline, the ref is internal, or the ref'd document
+// has no import-mapping entry (each package then keeps its own declaration,
+// matching the behavior from before typed context keys existed). For a
+// document mapped to the current package ("-") the returned constant is
+// unqualified — the sibling config generating that document declares it.
+func importedSecuritySchemeScopes(ref string) string {
+	if ref == "" || strings.HasPrefix(ref, "#") {
+		return ""
+	}
+	pathParts := strings.Split(ref, "#")
+	if len(pathParts) != 2 {
+		return ""
+	}
+	goPkg, ok := globalState.importMapping[pathParts[0]]
+	if !ok {
+		return ""
+	}
+	componentParts := strings.Split(pathParts[1], "/")
+	constName := securitySchemeScopesConstant(componentParts[len(componentParts)-1])
+	if goPkg.Path == importMappingCurrentPackage {
+		return constName
+	}
+	return fmt.Sprintf("%s.%s", goPkg.Name, constName)
 }
 
 // GenerateTypesForSchemas generates type definitions for any custom types defined in the
@@ -1034,7 +1203,7 @@ func GenerateTypesForSchemas(t *template.Template, schemas map[string]*openapi3.
 		}
 		schemaRef := schemas[schemaName]
 
-		goSchema, err := GenerateGoSchema(schemaRef, []string{schemaName})
+		goSchema, err := generateGoSchema(newRootGenContext([]string{schemaName}), schemaRef, []string{schemaName})
 		if err != nil {
 			return nil, fmt.Errorf("error converting Schema %s to Go type: %w", schemaName, err)
 		}
@@ -1080,6 +1249,17 @@ func GenerateTypesForParameters(t *template.Template, params map[string]*openapi
 			goTypeName = resolved
 		}
 
+		// A oneOf/anyOf parameter's members were named from an empty path
+		// (N0, N1, ...) and never declared, so the code did not compile.
+		// Name them after the parameter's type, <Name>0, and declare them.
+		if len(goType.UnionElements) > 0 && paramOrRef.Ref == "" {
+			goType, err = paramToGoType(paramOrRef.Value, []string{goTypeName})
+			if err != nil {
+				return nil, fmt.Errorf("error generating Go type for schema in parameter %s: %w", paramName, err)
+			}
+			types = append(types, goType.AdditionalTypes...)
+		}
+
 		typeDef := TypeDefinition{
 			JsonName: paramName,
 			Schema:   goType,
@@ -1098,6 +1278,67 @@ func GenerateTypesForParameters(t *template.Template, params map[string]*openapi
 		types = append(types, typeDef)
 	}
 	return types, nil
+}
+
+// componentResponseTypeName returns the Go type name that GenerateTypesForResponses
+// declares for the JSON content of components/responses/<responseName> under
+// mediaType. It honours x-go-name on the response, resolved-name collision
+// handling, and the per-media-type suffix used when a response declares more
+// than one JSON media type.
+//
+// GenerateResponseDefinitions uses the same name when it renders the strict
+// server's <Name>JSONResponse envelope for a component response, so that an
+// inline response-root schema which needs hoisting (a oneOf/anyOf union, an
+// object with additionalProperties, or any object under
+// generate-types-for-anonymous-schemas) references the model type declared
+// here instead of a synthetic <Name>JSONResponseBody type that nothing
+// declares (issue #2539).
+func componentResponseTypeName(responseName string, responseOrRef *openapi3.ResponseRef, mediaType string) (string, error) {
+	goTypeName, err := renameResponse(responseName, responseOrRef)
+	if err != nil {
+		return "", fmt.Errorf("error making name for components/responses/%s: %w", responseName, err)
+	}
+
+	if resolved := resolvedNameForComponent("responses", responseName, mediaType); resolved != "" {
+		goTypeName = resolved
+	}
+
+	if responseOrRef.Ref != "" {
+		// Generate a reference type for referenced parameters
+		refType, err := RefPathToGoType(responseOrRef.Ref)
+		if err != nil {
+			return "", fmt.Errorf("error generating Go type for (%s) in parameter %s: %w", responseOrRef.Ref, responseName, err)
+		}
+		goTypeName = SchemaNameToTypeName(refType)
+	}
+
+	if suffix := responseMediaTypeSuffix(responseOrRef.Value.Content, mediaType); suffix != "" {
+		goTypeName += suffix
+	}
+
+	return goTypeName, nil
+}
+
+// componentResponseRefTypeName resolves a `$ref` that points at a
+// components/responses entry of the spec being generated to the Go type name
+// GenerateTypesForResponses declares for that entry's content under mediaType.
+// It returns "" when the ref points somewhere else (another document, or a
+// component this spec doesn't declare), in which case the caller must not
+// assume a local type of that name exists.
+func componentResponseRefTypeName(ref string, mediaType string) (string, error) {
+	const prefix = "#/components/responses/"
+	if !strings.HasPrefix(ref, prefix) {
+		return "", nil
+	}
+	if globalState.spec == nil || globalState.spec.Components == nil {
+		return "", nil
+	}
+	responseName := strings.TrimPrefix(ref, prefix)
+	componentRef, ok := globalState.spec.Components.Responses[responseName]
+	if !ok || componentRef == nil || componentRef.Value == nil {
+		return "", nil
+	}
+	return componentResponseTypeName(responseName, componentRef, mediaType)
 }
 
 // GenerateTypesForResponses generates type definitions for any custom types defined in the
@@ -1141,32 +1382,15 @@ func GenerateTypesForResponses(t *template.Template, responses openapi3.Response
 				return nil, fmt.Errorf("error generating Go type for schema in response %s: %w", responseName, err)
 			}
 
-			goTypeName, err := renameResponse(responseName, responseOrRef)
+			goTypeName, err := componentResponseTypeName(responseName, responseOrRef, mediaType)
 			if err != nil {
-				return nil, fmt.Errorf("error making name for components/responses/%s: %w", responseName, err)
-			}
-
-			if resolved := resolvedNameForComponent("responses", responseName, mediaType); resolved != "" {
-				goTypeName = resolved
+				return nil, err
 			}
 
 			typeDef := TypeDefinition{
 				JsonName: responseName,
 				Schema:   goType,
 				TypeName: goTypeName,
-			}
-
-			if responseOrRef.Ref != "" {
-				// Generate a reference type for referenced parameters
-				refType, err := RefPathToGoType(responseOrRef.Ref)
-				if err != nil {
-					return nil, fmt.Errorf("error generating Go type for (%s) in parameter %s: %w", responseOrRef.Ref, responseName, err)
-				}
-				typeDef.TypeName = SchemaNameToTypeName(refType)
-			}
-
-			if suffix := responseMediaTypeSuffix(content, mediaType); suffix != "" {
-				typeDef.TypeName = typeDef.TypeName + suffix
 			}
 
 			types = append(types, typeDef)
@@ -1234,6 +1458,13 @@ func GenerateTypesForSecuritySchemes(t *template.Template, schemes map[string]*o
 	var types []TypeDefinition
 
 	for _, schemeName := range SortedSecuritySchemeKeys(schemes) {
+		if importedSecuritySchemeScopes(schemes[schemeName].Ref) != "" {
+			// The scheme $refs a spec assigned to another package by
+			// import-mapping. That package declares the context key type;
+			// the scopes constant alias emitted by GenerateConstants
+			// carries it over, so no local type is declared.
+			continue
+		}
 		// Generate a type to be used as a key in context.WithValue
 		goTypeName := LowercaseFirstCharacter(SchemaNameToTypeName(schemeName)) + "ContextKey"
 		goType := Schema{
@@ -1448,12 +1679,35 @@ func GenerateEnums(t *template.Template, types []TypeDefinition) (string, error)
 		}
 	}
 
-	// Now see if enums conflict with any non-enum typenames
+	// A non-string enum is emitted without quotes, so each value is copied
+	// into the const block as Go source. Only a number or boolean literal is
+	// acceptable there; anything else would be an identifier or an expression
+	// the spec got to choose.
+	for _, e := range enums {
+		if e.ValueWrapper != "" {
+			continue
+		}
+		for _, value := range SortedMapKeys(e.Schema.EnumValues) {
+			if !isNumberOrBoolLiteral(e.Schema.EnumValues[value]) {
+				return "", fmt.Errorf("enum value %q of %s is not a number or boolean literal, which its Go type %s requires", e.Schema.EnumValues[value], e.TypeName, e.Schema.GoType)
+			}
+		}
+	}
 
 	return GenerateTemplates([]string{"constants.tmpl"}, t, Constants{
 		EnumDefinitions:  enums,
 		SkipEnumValidate: globalState.options.OutputOptions.SkipEnumValidate,
 	})
+}
+
+// isNumberOrBoolLiteral reports whether s is a Go number or boolean literal
+// that may be emitted unquoted as the value of a non-string enum constant.
+func isNumberOrBoolLiteral(s string) bool {
+	if s == "true" || s == "false" {
+		return true
+	}
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil
 }
 
 // enumsConflict reports whether two enums must be disambiguated by prefixing.
@@ -1516,7 +1770,40 @@ func GenerateImports(t *template.Template, externalImports []string, packageName
 		RouterImports:     globalState.options.Generate.RouterImports(),
 	}
 
-	return GenerateTemplates([]string{"imports.tmpl"}, t, context)
+	out, err := GenerateTemplates([]string{"imports.tmpl"}, t, context)
+	if err != nil {
+		return "", err
+	}
+	return dedupeImportLines(out), nil
+}
+
+// dedupeImportLines drops repeated lines from the import block of the rendered
+// imports template. The template imports a fixed set of packages, and an
+// x-go-type-import or additional-imports entry may name one of them again,
+// e.g. `x-go-type-import: {path: time}`; Go rejects the second import of the
+// same name. Lines are compared exactly, so an aliased import of a package is
+// left alone.
+func dedupeImportLines(src string) string {
+	lines := strings.Split(src, "\n")
+	out := make([]string, 0, len(lines))
+	seen := make(map[string]bool)
+	inBlock := false
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		switch {
+		case !inBlock && trimmed == "import (":
+			inBlock = true
+		case inBlock && trimmed == ")":
+			inBlock = false
+		case inBlock && trimmed != "":
+			if seen[trimmed] {
+				continue
+			}
+			seen[trimmed] = true
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
 }
 
 // GenerateAdditionalPropertyBoilerplate generates all the glue code which provides
@@ -1668,6 +1955,15 @@ func LoadTemplates(src embed.FS, t *template.Template) error {
 		if d.IsDir() {
 			return nil
 		}
+		// hooks.tmpl files hold a framework's {{define}} overrides for the
+		// shared server-*.tmpl skeletons. They are intentionally NOT loaded
+		// into the shared base tree: buildServerTemplates parses each one into
+		// a per-framework clone instead. Loading them here would let one
+		// framework's overrides clobber the skeleton defaults that other
+		// frameworks (and unmigrated ones) rely on.
+		if d.Name() == "hooks.tmpl" {
+			return nil
+		}
 
 		buf, err := src.ReadFile(path)
 		if err != nil {
@@ -1682,6 +1978,50 @@ func LoadTemplates(src embed.FS, t *template.Template) error {
 		}
 		return nil
 	})
+}
+
+// serverTemplateHooks maps a server framework key to the embedded path of its
+// hooks file. A hooks file is a set of {{define "..."}} blocks that override the
+// {{block}} defaults in the shared server-*.tmpl skeletons.
+//
+// Only frameworks whose generated code deviates from the skeleton defaults need
+// an entry. The skeleton defaults ARE the stdhttp shape, so stdhttp (and the
+// frameworks not yet migrated to the layering: echo, gin, fiber, iris) run the
+// templates straight from the base tree with no clone.
+var serverTemplateHooks = map[string]string{
+	"chi":     "templates/chi/hooks.tmpl",
+	"gorilla": "templates/gorilla/hooks.tmpl",
+	"echo":    "templates/echo/hooks.tmpl",
+	"echo5":   "templates/echo/v5/hooks.tmpl",
+	"fiber":   "templates/fiber/hooks.tmpl",
+	"fiberv3": "templates/fiber-v3/hooks.tmpl",
+	"gin":     "templates/gin/hooks.tmpl",
+	"iris":    "templates/iris/hooks.tmpl",
+}
+
+// buildServerTemplates clones the base template tree once per framework in
+// serverTemplateHooks and parses that framework's hooks file into the clone.
+// text/template permits redefining a template that has not yet been executed,
+// so parsing the {{define}} overrides replaces the skeleton {{block}} defaults
+// in the clone (last definition wins). It must be called before the base tree
+// is executed, because a template cannot be cloned once it has run.
+func buildServerTemplates(src embed.FS, base *template.Template) (map[string]*template.Template, error) {
+	result := make(map[string]*template.Template, len(serverTemplateHooks))
+	for framework, path := range serverTemplateHooks {
+		clone, err := base.Clone()
+		if err != nil {
+			return nil, fmt.Errorf("cloning base templates for %s: %w", framework, err)
+		}
+		buf, err := src.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading hooks file '%s': %w", path, err)
+		}
+		if _, err := clone.Parse(string(buf)); err != nil {
+			return nil, fmt.Errorf("parsing hooks file '%s': %w", path, err)
+		}
+		result[framework] = clone
+	}
+	return result, nil
 }
 
 func OperationSchemaImports(s *Schema) (map[string]goImport, error) {

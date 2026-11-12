@@ -24,7 +24,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"go.yaml.in/yaml/v3"
+	"go.yaml.in/yaml/v4"
 
 	"github.com/oapi-codegen/oapi-codegen/v2/pkg/codegen"
 	"github.com/oapi-codegen/oapi-codegen/v2/pkg/util"
@@ -102,7 +102,7 @@ func main() {
 	// All flags below are deprecated, and will be removed in a future release. Please do not
 	// update their behavior.
 	flag.StringVar(&flagGenerate, "generate", "types,client,server,spec",
-		`Comma-separated list of code to generate; valid options: "types", "client", "chi-server", "server", "gin", "gorilla", "spec", "skip-fmt", "skip-prune", "fiber", "iris", "std-http".`)
+		`Comma-separated list of code to generate; valid options: "types", "client", "chi-server", "server", "gin", "gorilla", "spec", "skip-fmt", "skip-prune", "fiber", "fiber-v3", "iris", "std-http".`)
 	flag.StringVar(&flagIncludeTags, "include-tags", "", "Only include operations with the given tags. Comma-separated list of tags.")
 	flag.StringVar(&flagExcludeTags, "exclude-tags", "", "Exclude operations that are tagged with the given tags. Comma-separated list of tags.")
 	flag.StringVar(&flagIncludeOperationIDs, "include-operation-ids", "", "Only include operations with the given operation-ids. Comma-separated list of operation-ids.")
@@ -311,7 +311,9 @@ func main() {
 	overlayOpts := util.LoadSwaggerWithOverlayOpts{
 		Path: opts.OutputOptions.Overlay.Path,
 		// default to strict, but can be overridden
-		Strict: true,
+		Strict:              true,
+		LegacyJSONPath:      opts.Compatibility.OverlaysUseYamlJsonpath,
+		AllowRemoteRefsFrom: opts.AllowRemoteRefsFrom,
 	}
 
 	if opts.OutputOptions.Overlay.Strict != nil {
@@ -566,6 +568,8 @@ func generationTargets(cfg *codegen.Configuration, targets []string) error {
 			opts.ChiServer = true
 		case "fiber-server", "fiber":
 			opts.FiberServer = true
+		case "fiber-v3-server", "fiber-v3":
+			opts.FiberV3Server = true
 		case "server", "echo-server", "echo":
 			opts.EchoServer = true
 		case "echo5", "echo5-server":

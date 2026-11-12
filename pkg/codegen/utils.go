@@ -15,6 +15,7 @@ package codegen
 
 import (
 	"bytes"
+	"errors"
 	"cmp"
 	"fmt"
 	"go/token"
@@ -26,6 +27,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -547,6 +549,23 @@ func SwaggerUriToIrisUri(uri string) string {
 	return pathParamRE.ReplaceAllString(uri, ":$1")
 }
 
+// escapeLiteralPathColons escapes literal ':' characters in an OpenAPI path so
+// that routers which use ':' to introduce a path parameter (Echo, Gin, Fiber)
+// treat them as literals rather than parameter delimiters. Without this, a path
+// like "/pets:validate" registers a parameter named "validate", so multiple
+// such paths collide on the same prefix (issue #1726).
+//
+// The escaped form is a single backslash before the colon (`\:`). The register
+// templates render the result through toGoString (strconv.Quote), which turns
+// the backslash into `\\` in the emitted Go source, so the value the router
+// sees at runtime is exactly `\:` — the escape those routers understand.
+//
+// It must run before parameter substitution, which introduces its own ':'
+// delimiters that must stay unescaped.
+func escapeLiteralPathColons(uri string) string {
+	return strings.ReplaceAll(uri, ":", `\:`)
+}
+
 // SwaggerUriToEchoUri converts a OpenAPI style path URI with parameters to an
 // Echo compatible path URI. We need to replace all of OpenAPI parameters with
 // ":param". Valid input parameters are:
@@ -560,6 +579,7 @@ func SwaggerUriToIrisUri(uri string) string {
 //	{?param}
 //	{?param*}
 func SwaggerUriToEchoUri(uri string) string {
+	uri = escapeLiteralPathColons(uri)
 	return pathParamRE.ReplaceAllString(uri, ":$1")
 }
 
@@ -576,6 +596,7 @@ func SwaggerUriToEchoUri(uri string) string {
 //	{?param}
 //	{?param*}
 func SwaggerUriToFiberUri(uri string) string {
+	uri = escapeLiteralPathColons(uri)
 	return pathParamRE.ReplaceAllString(uri, ":$1")
 }
 
@@ -608,6 +629,7 @@ func SwaggerUriToChiUri(uri string) string {
 //	{?param}
 //	{?param*}
 func SwaggerUriToGinUri(uri string) string {
+	uri = escapeLiteralPathColons(uri)
 	return pathParamRE.ReplaceAllString(uri, ":$1")
 }
 
@@ -641,16 +663,68 @@ func SwaggerUriToGorillaUri(uri string) string {
 //	{?param}
 //	{?param*}
 func SwaggerUriToStdHttpUri(uri string) string {
-	// https://pkg.go.dev/net/http#hdr-Patterns-ServeMux
-	// The special wildcard {$} matches only the end of the URL. For example, the pattern "/{$}" matches only the path "/", whereas the pattern "/" matches every path.
-	if uri == "/" {
-		return "/{$}"
-	}
-
-	return pathParamRE.ReplaceAllStringFunc(uri, func(match string) string {
+	uri = pathParamRE.ReplaceAllStringFunc(uri, func(match string) string {
 		sub := pathParamRE.FindStringSubmatch(match)
 		return "{" + SanitizeGoIdentifier(sub[1]) + "}"
 	})
+
+	// https://pkg.go.dev/net/http#hdr-Patterns-ServeMux
+	// A ServeMux pattern ending in '/' matches the whole subtree below it,
+	// while an OpenAPI path ending in '/' means exactly that path. The
+	// special wildcard {$} anchors the pattern to the end of the URL:
+	// "/foo/{$}" matches only "/foo/", whereas "/foo/" matches every path
+	// under it. Anchoring also prevents registration panics when subtree
+	// patterns from independent spec paths overlap ambiguously (#2065).
+	// Appended after parameter sanitization so the '$' is not treated as a
+	// parameter name.
+	if strings.HasSuffix(uri, "/") {
+		uri += "{$}"
+	}
+
+	return uri
+}
+
+// ValidateStdHTTPPath reports whether an OpenAPI path can be registered with
+// net/http ServeMux. ServeMux wildcards must occupy an entire path segment, so
+// mixed segments such as "{resourceId}:apply" are rejected at codegen time
+// instead of panicking at server startup (see #2488).
+func ValidateStdHTTPPath(path string) error {
+	for _, seg := range strings.Split(path, "/") {
+		if seg == "" || seg == "{$}" {
+			continue
+		}
+		loc := pathParamRE.FindStringIndex(seg)
+		if loc == nil {
+			// pure literal segment
+			continue
+		}
+		// Wildcard must be the entire segment.
+		if loc[0] != 0 || loc[1] != len(seg) {
+			return fmt.Errorf("path %q: segment %q mixes a path parameter with literal text; net/http ServeMux requires wildcards to occupy an entire path segment (std-http-server)", path, seg)
+		}
+	}
+	return nil
+}
+
+// ValidateStdHTTPPaths validates every path in the document for ServeMux.
+// Paths whose operations have all been removed (e.g. by tag or operation-id
+// filtering) emit no routes, so they are skipped.
+func ValidateStdHTTPPaths(spec *openapi3.T) error {
+	if spec == nil || spec.Paths == nil {
+		return nil
+	}
+	var errs []error
+	pathMap := spec.Paths.Map()
+	for _, path := range SortedMapKeys(pathMap) {
+		pathItem := pathMap[path]
+		if pathItem == nil || len(pathItem.Operations()) == 0 {
+			continue
+		}
+		if err := ValidateStdHTTPPath(path); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // OrderedParamsFromUri returns the argument names, in order, in a given URI string, so for
@@ -664,9 +738,45 @@ func OrderedParamsFromUri(uri string) []string {
 	return result
 }
 
-// ReplacePathParamsWithStr replaces path parameters of the form {param} with %s
-func ReplacePathParamsWithStr(uri string) string {
-	return pathParamRE.ReplaceAllString(uri, "%s")
+// GenPathString constructs a Go expression that builds the given URI by concatenating
+// its literal segments with the path-parameter variables named <paramVarName>0 through
+// <paramVarName>N. Literal segments are quoted with strconv.Quote so that characters
+// which are significant in Go source, such as quotes, backslashes and percent signs,
+// survive into the generated code unchanged.
+func GenPathString(uri, paramVarName string) string {
+	matches := pathParamRE.FindAllStringSubmatchIndex(uri, -1)
+	if len(matches) == 0 {
+		return strconv.Quote(uri)
+	}
+
+	// A path parameter may appear more than once in the same path. SortParamsByPath
+	// deduplicates them and preserves first-occurrence order, and the client template
+	// declares one variable per deduplicated parameter, so every repeat has to refer
+	// back to the variable assigned to its first occurrence.
+	varIndexByName := make(map[string]int, len(matches))
+
+	parts := make([]string, 0, 2*len(matches)+1)
+	pos := 0
+	for _, match := range matches {
+		if literal := uri[pos:match[0]]; literal != "" {
+			parts = append(parts, strconv.Quote(literal))
+		}
+
+		name := uri[match[2]:match[3]]
+		idx, seen := varIndexByName[name]
+		if !seen {
+			idx = len(varIndexByName)
+			varIndexByName[name] = idx
+		}
+
+		parts = append(parts, fmt.Sprintf("%s%d", paramVarName, idx))
+		pos = match[1]
+	}
+	if literal := uri[pos:]; literal != "" {
+		parts = append(parts, strconv.Quote(literal))
+	}
+
+	return strings.Join(parts, " + ")
 }
 
 // SortParamsByPath reorders the given parameter definitions to match those in the path URI.
@@ -901,7 +1011,24 @@ func PathToTypeName(path []string) string {
 	for i, p := range path {
 		path[i] = nameNormalizer(p)
 	}
-	return strings.Join(path, "_")
+	name := strings.Join(path, "_")
+
+	// A path can start with a bare numeric segment, e.g. a numeric HTTP
+	// response status code ("400") being hoisted as part of a longer path
+	// such as ["400", "Errors"]. nameNormalizer does not itself guard
+	// against a leading digit (unlike typeNamePrefix, used by
+	// SchemaNameToTypeName for a plain, unqualified name), so do the same
+	// "prepend N" fix up here, directly on the assembled name, without
+	// otherwise changing its casing or separators — callers already
+	// wrapping this in SchemaNameToTypeName (which would itself add the
+	// same prefix) are unaffected, and callers that use this result
+	// as-is (the various anonymous-schema hoist paths) now also get a
+	// valid identifier.
+	if r, _ := utf8.DecodeRuneInString(name); unicode.IsDigit(r) {
+		name = "N" + name
+	}
+
+	return name
 }
 
 // StringToGoString takes an arbitrary string and converts it to a valid Go string literal,
@@ -1148,11 +1275,150 @@ func ParseGoImportExtension(v *openapi3.SchemaRef) (*goImport, error) {
 // TypeDefinitionsEquivalent checks for equality between two type definitions, but
 // not every field is considered. We only want to know if they are fundamentally
 // the same type.
+//
+// The schemas are compared like reflect.DeepEqual, except that kin-openapi's
+// source locations (*openapi3.Origin) are ignored, so the same schema declared
+// on two different lines is still the same type. Comparing the JSON encodings
+// instead would not work: a $ref encodes as its string alone, so two schemas
+// whose $refs resolve to different targets would look equal.
 func TypeDefinitionsEquivalent(t1, t2 TypeDefinition) bool {
 	if t1.TypeName != t2.TypeName {
 		return false
 	}
-	return reflect.DeepEqual(t1.Schema.OAPISchema, t2.Schema.OAPISchema)
+	return deepEqualIgnoringOrigin(
+		reflect.ValueOf(t1.Schema.OAPISchema),
+		reflect.ValueOf(t2.Schema.OAPISchema),
+		map[visitedPair]bool{},
+	)
+}
+
+var originPtrType = reflect.TypeFor[*openapi3.Origin]()
+
+// visitedPair identifies two references that deepEqualIgnoringOrigin has
+// started comparing. Like the visit type in reflect.DeepEqual, it lets the
+// comparison of recursive schemas terminate. sliceLen is only set for slices,
+// because slices of different lengths can share a first element.
+type visitedPair struct {
+	addr1, addr2 uintptr
+	typ          reflect.Type
+	sliceLen     int
+}
+
+// deepEqualIgnoringOrigin reports whether v1 and v2 are deeply equal, treating
+// any two *openapi3.Origin values as equal.
+//
+// It follows deepValueEqual in the standard library's reflect/deepequal.go,
+// which isn't exported, so that reviewers can compare the two. It differs in
+// the following ways:
+//   - It skips *openapi3.Origin values.
+//   - It records visits only for pointers, maps and slices, not interfaces.
+//     Any cycle passes through one of these kinds.
+//   - It compares channels and unsafe pointers by address, because the
+//     standard library's fallback relies on an unexported function.
+//   - It has no fast path for []byte.
+func deepEqualIgnoringOrigin(v1, v2 reflect.Value, visited map[visitedPair]bool) bool {
+	if !v1.IsValid() || !v2.IsValid() {
+		return v1.IsValid() == v2.IsValid()
+	}
+	if v1.Type() != v2.Type() {
+		return false
+	}
+	if v1.Type() == originPtrType {
+		return true
+	}
+
+	switch v1.Kind() {
+	case reflect.Pointer, reflect.Map, reflect.Slice:
+		if !v1.IsNil() && !v2.IsNil() {
+			addr1, addr2 := uintptr(v1.UnsafePointer()), uintptr(v2.UnsafePointer())
+			if addr1 > addr2 {
+				addr1, addr2 = addr2, addr1
+			}
+			pair := visitedPair{addr1: addr1, addr2: addr2, typ: v1.Type()}
+			if v1.Kind() == reflect.Slice {
+				pair.sliceLen = v1.Len()
+			}
+			if visited[pair] {
+				return true
+			}
+			visited[pair] = true
+		}
+	}
+
+	switch v1.Kind() {
+	case reflect.Array:
+		for i := range v1.Len() {
+			if !deepEqualIgnoringOrigin(v1.Index(i), v2.Index(i), visited) {
+				return false
+			}
+		}
+		return true
+	case reflect.Slice:
+		if v1.IsNil() != v2.IsNil() || v1.Len() != v2.Len() {
+			return false
+		}
+		if v1.UnsafePointer() == v2.UnsafePointer() {
+			return true
+		}
+		for i := range v1.Len() {
+			if !deepEqualIgnoringOrigin(v1.Index(i), v2.Index(i), visited) {
+				return false
+			}
+		}
+		return true
+	case reflect.Interface:
+		if v1.IsNil() || v2.IsNil() {
+			return v1.IsNil() == v2.IsNil()
+		}
+		return deepEqualIgnoringOrigin(v1.Elem(), v2.Elem(), visited)
+	case reflect.Pointer:
+		if v1.UnsafePointer() == v2.UnsafePointer() {
+			return true
+		}
+		return deepEqualIgnoringOrigin(v1.Elem(), v2.Elem(), visited)
+	case reflect.Struct:
+		for i := range v1.NumField() {
+			if !deepEqualIgnoringOrigin(v1.Field(i), v2.Field(i), visited) {
+				return false
+			}
+		}
+		return true
+	case reflect.Map:
+		if v1.IsNil() != v2.IsNil() || v1.Len() != v2.Len() {
+			return false
+		}
+		if v1.UnsafePointer() == v2.UnsafePointer() {
+			return true
+		}
+		iter := v1.MapRange()
+		for iter.Next() {
+			val2 := v2.MapIndex(iter.Key())
+			if !val2.IsValid() || !deepEqualIgnoringOrigin(iter.Value(), val2, visited) {
+				return false
+			}
+		}
+		return true
+	case reflect.Func:
+		// Like reflect.DeepEqual, functions are only equal if both are nil.
+		return v1.IsNil() && v2.IsNil()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return v1.Int() == v2.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return v1.Uint() == v2.Uint()
+	case reflect.String:
+		return v1.String() == v2.String()
+	case reflect.Bool:
+		return v1.Bool() == v2.Bool()
+	case reflect.Float32, reflect.Float64:
+		return v1.Float() == v2.Float()
+	case reflect.Complex64, reflect.Complex128:
+		return v1.Complex() == v2.Complex()
+	case reflect.Chan, reflect.UnsafePointer:
+		return v1.UnsafePointer() == v2.UnsafePointer()
+	default:
+		// Only reflect.Invalid is left, and IsValid excludes it above.
+		return false
+	}
 }
 
 // isAdditionalPropertiesExplicitFalse determines whether an openapi3.Schema is explicitly defined as `additionalProperties: false`
@@ -1169,4 +1435,12 @@ func normalizeWhitespace(s string) string {
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.ReplaceAll(s, "\r", "\n")
 	return strings.TrimRight(s, "\n\r")
+}
+
+// appendUnique appends v to s unless s already has it.
+func appendUnique[S ~[]E, E comparable](s S, v E) S {
+	if slices.Contains(s, v) {
+		return s
+	}
+	return append(s, v)
 }

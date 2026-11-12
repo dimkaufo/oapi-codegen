@@ -53,6 +53,12 @@ type ServerInterface interface {
 	// (POST /reusable-responses)
 	ReusableResponses(ctx iris.Context)
 
+	// (POST /reusable-urlencoded-response)
+	ReusableURLEncodedResponse(ctx iris.Context)
+
+	// (POST /same-name-param-and-body-property/{name})
+	SameNameParamAndBodyProperty(ctx iris.Context, name string)
+
 	// (POST /text)
 	TextExample(ctx iris.Context)
 
@@ -137,7 +143,7 @@ func (w *ServerInterfaceWrapper) ReservedGoKeywordParameters(ctx iris.Context) {
 	// ------------- Path parameter "type" -------------
 	var pType string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "type", ctx.Params().Get("type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "type", ctx.Params().Get("type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
 		ctx.StatusCode(http.StatusBadRequest)
 		ctx.Writef("Invalid format for parameter type: %s", err)
@@ -153,6 +159,33 @@ func (w *ServerInterfaceWrapper) ReusableResponses(ctx iris.Context) {
 
 	// Invoke the callback with all the unmarshaled arguments
 	w.Handler.ReusableResponses(ctx)
+}
+
+// ReusableURLEncodedResponse converts iris context to params.
+func (w *ServerInterfaceWrapper) ReusableURLEncodedResponse(ctx iris.Context) {
+
+	// Invoke the callback with all the unmarshaled arguments
+	w.Handler.ReusableURLEncodedResponse(ctx)
+}
+
+// SameNameParamAndBodyProperty converts iris context to params.
+func (w *ServerInterfaceWrapper) SameNameParamAndBodyProperty(ctx iris.Context) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", ctx.Params().Get("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		ctx.StatusCode(http.StatusBadRequest)
+		ctx.Writef("Invalid format for parameter name: %s", err)
+		return
+	}
+
+	// Invoke the callback with all the unmarshaled arguments
+	w.Handler.SameNameParamAndBodyProperty(ctx, name)
 }
 
 // TextExample converts iris context to params.
@@ -260,25 +293,30 @@ func RegisterHandlers(router *iris.Application, si ServerInterface) {
 
 // RegisterHandlersWithOptions creates http.Handler with additional options
 func RegisterHandlersWithOptions(router *iris.Application, si ServerInterface, options IrisServerOptions) {
+	for _, m := range options.Middlewares {
+		router.Use(m)
+	}
 
 	wrapper := ServerInterfaceWrapper{
 		Handler: si,
 	}
 
 	router.Post(options.BaseURL+"/json", wrapper.JSONExample)
+	router.Post(options.BaseURL+"/urlencoded", wrapper.URLEncodedExample)
 	router.Post(options.BaseURL+"/multipart", wrapper.MultipartExample)
 	router.Post(options.BaseURL+"/multipart-related", wrapper.MultipartRelatedExample)
+	router.Post(options.BaseURL+"/text", wrapper.TextExample)
+	router.Post(options.BaseURL+"/unknown", wrapper.UnknownExample)
 	router.Post(options.BaseURL+"/multiple", wrapper.MultipleRequestAndResponseTypes)
+	router.Post(options.BaseURL+"/with-headers", wrapper.HeadersExample)
 	router.Post(options.BaseURL+"/no-content-headers", wrapper.NoContentHeaders)
+	router.Post(options.BaseURL+"/reusable-responses", wrapper.ReusableResponses)
+	router.Post(options.BaseURL+"/reusable-urlencoded-response", wrapper.ReusableURLEncodedResponse)
+	router.Post(options.BaseURL+"/unspecified-content-type", wrapper.UnspecifiedContentType)
 	router.Post(options.BaseURL+"/required-json-body", wrapper.RequiredJSONBody)
 	router.Post(options.BaseURL+"/required-text-body", wrapper.RequiredTextBody)
 	router.Get(options.BaseURL+"/reserved-go-keyword-parameters/:type", wrapper.ReservedGoKeywordParameters)
-	router.Post(options.BaseURL+"/reusable-responses", wrapper.ReusableResponses)
-	router.Post(options.BaseURL+"/text", wrapper.TextExample)
-	router.Post(options.BaseURL+"/unknown", wrapper.UnknownExample)
-	router.Post(options.BaseURL+"/unspecified-content-type", wrapper.UnspecifiedContentType)
-	router.Post(options.BaseURL+"/urlencoded", wrapper.URLEncodedExample)
-	router.Post(options.BaseURL+"/with-headers", wrapper.HeadersExample)
+	router.Post(options.BaseURL+"/same-name-param-and-body-property/:name", wrapper.SameNameParamAndBodyProperty)
 	router.Post(options.BaseURL+"/with-union", wrapper.UnionExample)
 
 	router.Build()
@@ -296,6 +334,8 @@ type ReusableresponseJSONResponse struct {
 
 	Headers ReusableresponseResponseHeaders
 }
+
+type ReusableurlencodedresponseFormdataResponse Example
 
 type JSONExampleRequestObject struct {
 	Body *JSONExampleJSONRequestBody
@@ -471,7 +511,7 @@ func (response MultipleRequestAndResponseTypes200TextResponse) VisitMultipleRequ
 	ctx.ResponseWriter().Header().Set("Content-Type", "text/plain")
 	ctx.StatusCode(200)
 
-	_, err := ctx.WriteString(string(response))
+	_, err := ctx.WriteString(fmt.Sprint(response))
 	return err
 }
 
@@ -500,10 +540,22 @@ type NoContentHeaders204Response struct {
 
 func (response NoContentHeaders204Response) VisitNoContentHeadersResponse(ctx iris.Context) error {
 	if response.Headers.NullableHeader != nil {
-		ctx.ResponseWriter().Header().Set("nullable-header", fmt.Sprint(*response.Headers.NullableHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "nullable-header", *response.Headers.NullableHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header nullable-header: %w", err)
+			}
+			ctx.ResponseWriter().Header().Set("nullable-header", v)
+		}
 	}
 	if response.Headers.OptionalHeader != nil {
-		ctx.ResponseWriter().Header().Set("optional-header", fmt.Sprint(*response.Headers.OptionalHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "optional-header", *response.Headers.OptionalHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header optional-header: %w", err)
+			}
+			ctx.ResponseWriter().Header().Set("optional-header", v)
+		}
 	}
 	ctx.StatusCode(204)
 	return nil
@@ -556,7 +608,7 @@ func (response RequiredTextBody200TextResponse) VisitRequiredTextBodyResponse(ct
 	ctx.ResponseWriter().Header().Set("Content-Type", "text/plain")
 	ctx.StatusCode(200)
 
-	_, err := ctx.WriteString(string(response))
+	_, err := ctx.WriteString(fmt.Sprint(response))
 	return err
 }
 
@@ -590,7 +642,7 @@ func (response ReservedGoKeywordParameters200TextResponse) VisitReservedGoKeywor
 	ctx.ResponseWriter().Header().Set("Content-Type", "text/plain")
 	ctx.StatusCode(200)
 
-	_, err := ctx.WriteString(string(response))
+	_, err := ctx.WriteString(fmt.Sprint(response))
 	return err
 }
 
@@ -605,8 +657,20 @@ type ReusableResponsesResponseObject interface {
 type ReusableResponses200JSONResponse struct{ ReusableresponseJSONResponse }
 
 func (response ReusableResponses200JSONResponse) VisitReusableResponsesResponse(ctx iris.Context) error {
-	ctx.ResponseWriter().Header().Set("header1", fmt.Sprint(response.Headers.Header1))
-	ctx.ResponseWriter().Header().Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		ctx.ResponseWriter().Header().Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		ctx.ResponseWriter().Header().Set("header2", v)
+	}
 	ctx.ResponseWriter().Header().Set("Content-Type", "application/json")
 	ctx.StatusCode(200)
 
@@ -629,6 +693,64 @@ func (response ReusableResponsesdefaultResponse) VisitReusableResponsesResponse(
 	return nil
 }
 
+type ReusableURLEncodedResponseRequestObject struct {
+	Body *ReusableURLEncodedResponseFormdataRequestBody
+}
+
+type ReusableURLEncodedResponseResponseObject interface {
+	VisitReusableURLEncodedResponseResponse(ctx iris.Context) error
+}
+
+type ReusableURLEncodedResponse200FormdataResponse struct {
+	ReusableurlencodedresponseFormdataResponse
+}
+
+func (response ReusableURLEncodedResponse200FormdataResponse) VisitReusableURLEncodedResponseResponse(ctx iris.Context) error {
+	ctx.ResponseWriter().Header().Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx.StatusCode(200)
+
+	if form, err := runtime.MarshalForm(response.ReusableurlencodedresponseFormdataResponse, nil); err != nil {
+		return err
+	} else {
+		_, err := ctx.WriteString(form.Encode())
+		return err
+	}
+}
+
+type ReusableURLEncodedResponse400Response = BadrequestResponse
+
+func (response ReusableURLEncodedResponse400Response) VisitReusableURLEncodedResponseResponse(ctx iris.Context) error {
+	ctx.StatusCode(400)
+	return nil
+}
+
+type ReusableURLEncodedResponsedefaultResponse struct {
+	StatusCode int
+}
+
+func (response ReusableURLEncodedResponsedefaultResponse) VisitReusableURLEncodedResponseResponse(ctx iris.Context) error {
+	ctx.StatusCode(response.StatusCode)
+	return nil
+}
+
+type SameNameParamAndBodyPropertyRequestObject struct {
+	Name string `json:"name"`
+	Body *SameNameParamAndBodyPropertyJSONRequestBody
+}
+
+type SameNameParamAndBodyPropertyResponseObject interface {
+	VisitSameNameParamAndBodyPropertyResponse(ctx iris.Context) error
+}
+
+type SameNameParamAndBodyProperty200JSONResponse SameName
+
+func (response SameNameParamAndBodyProperty200JSONResponse) VisitSameNameParamAndBodyPropertyResponse(ctx iris.Context) error {
+	ctx.ResponseWriter().Header().Set("Content-Type", "application/json")
+	ctx.StatusCode(200)
+
+	return ctx.JSON(&response)
+}
+
 type TextExampleRequestObject struct {
 	Body *TextExampleTextRequestBody
 }
@@ -643,7 +765,7 @@ func (response TextExample200TextResponse) VisitTextExampleResponse(ctx iris.Con
 	ctx.ResponseWriter().Header().Set("Content-Type", "text/plain")
 	ctx.StatusCode(200)
 
-	_, err := ctx.WriteString(string(response))
+	_, err := ctx.WriteString(fmt.Sprint(response))
 	return err
 }
 
@@ -827,13 +949,37 @@ type HeadersExample200JSONResponse struct {
 }
 
 func (response HeadersExample200JSONResponse) VisitHeadersExampleResponse(ctx iris.Context) error {
-	ctx.ResponseWriter().Header().Set("header1", fmt.Sprint(response.Headers.Header1))
-	ctx.ResponseWriter().Header().Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		ctx.ResponseWriter().Header().Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		ctx.ResponseWriter().Header().Set("header2", v)
+	}
 	if response.Headers.NullableHeader != nil {
-		ctx.ResponseWriter().Header().Set("nullable-header", fmt.Sprint(*response.Headers.NullableHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "nullable-header", *response.Headers.NullableHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header nullable-header: %w", err)
+			}
+			ctx.ResponseWriter().Header().Set("nullable-header", v)
+		}
 	}
 	if response.Headers.OptionalHeader != nil {
-		ctx.ResponseWriter().Header().Set("optional-header", fmt.Sprint(*response.Headers.OptionalHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "optional-header", *response.Headers.OptionalHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header optional-header: %w", err)
+			}
+			ctx.ResponseWriter().Header().Set("optional-header", v)
+		}
 	}
 	ctx.ResponseWriter().Header().Set("Content-Type", "application/json")
 	ctx.StatusCode(200)
@@ -876,8 +1022,20 @@ type UnionExample200ApplicationAlternativePlusJSONResponse struct {
 }
 
 func (response UnionExample200ApplicationAlternativePlusJSONResponse) VisitUnionExampleResponse(ctx iris.Context) error {
-	ctx.ResponseWriter().Header().Set("header1", fmt.Sprint(response.Headers.Header1))
-	ctx.ResponseWriter().Header().Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		ctx.ResponseWriter().Header().Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		ctx.ResponseWriter().Header().Set("header2", v)
+	}
 	ctx.ResponseWriter().Header().Set("Content-Type", "application/alternative+json")
 	ctx.StatusCode(200)
 
@@ -890,12 +1048,24 @@ type UnionExample200JSONResponse struct {
 }
 
 func (response UnionExample200JSONResponse) VisitUnionExampleResponse(ctx iris.Context) error {
-	ctx.ResponseWriter().Header().Set("header1", fmt.Sprint(response.Headers.Header1))
-	ctx.ResponseWriter().Header().Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		ctx.ResponseWriter().Header().Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		ctx.ResponseWriter().Header().Set("header2", v)
+	}
 	ctx.ResponseWriter().Header().Set("Content-Type", "application/json")
 	ctx.StatusCode(200)
 
-	return ctx.JSON(&response.Body.union)
+	return ctx.JSON(&response.Body)
 }
 
 type UnionExample400Response = BadrequestResponse
@@ -944,6 +1114,12 @@ type StrictServerInterface interface {
 	// (POST /reusable-responses)
 	ReusableResponses(ctx context.Context, request ReusableResponsesRequestObject) (ReusableResponsesResponseObject, error)
 
+	// (POST /reusable-urlencoded-response)
+	ReusableURLEncodedResponse(ctx context.Context, request ReusableURLEncodedResponseRequestObject) (ReusableURLEncodedResponseResponseObject, error)
+
+	// (POST /same-name-param-and-body-property/{name})
+	SameNameParamAndBodyProperty(ctx context.Context, request SameNameParamAndBodyPropertyRequestObject) (SameNameParamAndBodyPropertyResponseObject, error)
+
 	// (POST /text)
 	TextExample(ctx context.Context, request TextExampleRequestObject) (TextExampleResponseObject, error)
 
@@ -963,8 +1139,11 @@ type StrictServerInterface interface {
 	UnionExample(ctx context.Context, request UnionExampleRequestObject) (UnionExampleResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx iris.Context, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx iris.Context, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares}
@@ -980,7 +1159,18 @@ func (sh *strictHandler) JSONExample(ctx iris.Context) {
 	var request JSONExampleRequestObject
 
 	var body JSONExampleJSONRequestBody
-	if err := ctx.ReadJSON(&body); err != nil {
+	var err error
+	// A request validator built on kin-openapi's openapi3filter with
+	// KeepValidatedValue leaves the value it validated on the body. Bind
+	// that value, matching member names exactly, so the handler receives
+	// what was validated instead of a second, case-insensitive decode.
+	if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+		err = ctx.ReadJSON(&body)
+	} else {
+		// ReadJSON runs the application's validator after decoding; keep that.
+		err = ctx.Application().Validate(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			ctx.StopWithError(http.StatusBadRequest, err)
 			return
@@ -989,7 +1179,7 @@ func (sh *strictHandler) JSONExample(ctx iris.Context) {
 		request.Body = &body
 	}
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.JSONExample(ctx, request.(JSONExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -999,15 +1189,15 @@ func (sh *strictHandler) JSONExample(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(JSONExampleResponseObject); ok {
 		if err := validResponse.VisitJSONExampleResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1023,7 +1213,7 @@ func (sh *strictHandler) MultipartExample(ctx iris.Context) {
 		return
 	}
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.MultipartExample(ctx, request.(MultipartExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1033,15 +1223,15 @@ func (sh *strictHandler) MultipartExample(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(MultipartExampleResponseObject); ok {
 		if err := validResponse.VisitMultipartExampleResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1060,7 +1250,7 @@ func (sh *strictHandler) MultipartRelatedExample(ctx iris.Context) {
 		request.Body = multipart.NewReader(ctx.Request().Body, boundary)
 	}
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.MultipartRelatedExample(ctx, request.(MultipartRelatedExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1070,15 +1260,15 @@ func (sh *strictHandler) MultipartRelatedExample(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(MultipartRelatedExampleResponseObject); ok {
 		if err := validResponse.VisitMultipartRelatedExampleResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1090,7 +1280,18 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(ctx iris.Context) {
 	if strings.HasPrefix(ctx.GetHeader("Content-Type"), "application/json") {
 
 		var body MultipleRequestAndResponseTypesJSONRequestBody
-		if err := ctx.ReadJSON(&body); err != nil {
+		var err error
+		// A request validator built on kin-openapi's openapi3filter with
+		// KeepValidatedValue leaves the value it validated on the body. Bind
+		// that value, matching member names exactly, so the handler receives
+		// what was validated instead of a second, case-insensitive decode.
+		if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+			err = ctx.ReadJSON(&body)
+		} else {
+			// ReadJSON runs the application's validator after decoding; keep that.
+			err = ctx.Application().Validate(&body)
+		}
+		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				ctx.StopWithError(http.StatusBadRequest, err)
 				return
@@ -1134,7 +1335,7 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(ctx iris.Context) {
 		}
 	}
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.MultipleRequestAndResponseTypes(ctx, request.(MultipleRequestAndResponseTypesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1144,15 +1345,15 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(MultipleRequestAndResponseTypesResponseObject); ok {
 		if err := validResponse.VisitMultipleRequestAndResponseTypesResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1161,7 +1362,7 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(ctx iris.Context) {
 func (sh *strictHandler) NoContentHeaders(ctx iris.Context) {
 	var request NoContentHeadersRequestObject
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.NoContentHeaders(ctx, request.(NoContentHeadersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1171,15 +1372,15 @@ func (sh *strictHandler) NoContentHeaders(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(NoContentHeadersResponseObject); ok {
 		if err := validResponse.VisitNoContentHeadersResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1189,13 +1390,24 @@ func (sh *strictHandler) RequiredJSONBody(ctx iris.Context) {
 	var request RequiredJSONBodyRequestObject
 
 	var body RequiredJSONBodyJSONRequestBody
-	if err := ctx.ReadJSON(&body); err != nil {
+	var err error
+	// A request validator built on kin-openapi's openapi3filter with
+	// KeepValidatedValue leaves the value it validated on the body. Bind
+	// that value, matching member names exactly, so the handler receives
+	// what was validated instead of a second, case-insensitive decode.
+	if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+		err = ctx.ReadJSON(&body)
+	} else {
+		// ReadJSON runs the application's validator after decoding; keep that.
+		err = ctx.Application().Validate(&body)
+	}
+	if err != nil {
 		ctx.StopWithError(http.StatusBadRequest, err)
 		return
 	}
 	request.Body = &body
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.RequiredJSONBody(ctx, request.(RequiredJSONBodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1205,15 +1417,15 @@ func (sh *strictHandler) RequiredJSONBody(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(RequiredJSONBodyResponseObject); ok {
 		if err := validResponse.VisitRequiredJSONBodyResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1230,7 +1442,7 @@ func (sh *strictHandler) RequiredTextBody(ctx iris.Context) {
 	body := RequiredTextBodyTextRequestBody(data)
 	request.Body = &body
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.RequiredTextBody(ctx, request.(RequiredTextBodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1240,15 +1452,15 @@ func (sh *strictHandler) RequiredTextBody(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(RequiredTextBodyResponseObject); ok {
 		if err := validResponse.VisitRequiredTextBodyResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1259,7 +1471,7 @@ func (sh *strictHandler) ReservedGoKeywordParameters(ctx iris.Context, pType str
 
 	request.Type = pType
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.ReservedGoKeywordParameters(ctx, request.(ReservedGoKeywordParametersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1269,15 +1481,15 @@ func (sh *strictHandler) ReservedGoKeywordParameters(ctx iris.Context, pType str
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(ReservedGoKeywordParametersResponseObject); ok {
 		if err := validResponse.VisitReservedGoKeywordParametersResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1287,7 +1499,18 @@ func (sh *strictHandler) ReusableResponses(ctx iris.Context) {
 	var request ReusableResponsesRequestObject
 
 	var body ReusableResponsesJSONRequestBody
-	if err := ctx.ReadJSON(&body); err != nil {
+	var err error
+	// A request validator built on kin-openapi's openapi3filter with
+	// KeepValidatedValue leaves the value it validated on the body. Bind
+	// that value, matching member names exactly, so the handler receives
+	// what was validated instead of a second, case-insensitive decode.
+	if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+		err = ctx.ReadJSON(&body)
+	} else {
+		// ReadJSON runs the application's validator after decoding; keep that.
+		err = ctx.Application().Validate(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			ctx.StopWithError(http.StatusBadRequest, err)
 			return
@@ -1296,7 +1519,7 @@ func (sh *strictHandler) ReusableResponses(ctx iris.Context) {
 		request.Body = &body
 	}
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.ReusableResponses(ctx, request.(ReusableResponsesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1306,15 +1529,103 @@ func (sh *strictHandler) ReusableResponses(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(ReusableResponsesResponseObject); ok {
 		if err := validResponse.VisitReusableResponsesResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
+		return
+	}
+}
+
+// ReusableURLEncodedResponse operation middleware
+func (sh *strictHandler) ReusableURLEncodedResponse(ctx iris.Context) {
+	var request ReusableURLEncodedResponseRequestObject
+
+	if err := ctx.Request().ParseForm(); err != nil {
+		ctx.StopWithError(http.StatusBadRequest, err)
+		return
+	}
+	var body ReusableURLEncodedResponseFormdataRequestBody
+	if err := runtime.BindForm(&body, ctx.Request().Form, nil, nil); err != nil {
+		ctx.StopWithError(http.StatusBadRequest, err)
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx iris.Context, request any) (any, error) {
+		return sh.ssi.ReusableURLEncodedResponse(ctx, request.(ReusableURLEncodedResponseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReusableURLEncodedResponse")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		ctx.StopWithError(http.StatusInternalServerError, err)
+		return
+	} else if validResponse, ok := response.(ReusableURLEncodedResponseResponseObject); ok {
+		if err := validResponse.VisitReusableURLEncodedResponseResponse(ctx); err != nil {
+			ctx.StopWithError(http.StatusInternalServerError, err)
+			return
+		}
+	} else if response != nil {
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
+		return
+	}
+}
+
+// SameNameParamAndBodyProperty operation middleware
+func (sh *strictHandler) SameNameParamAndBodyProperty(ctx iris.Context, name string) {
+	var request SameNameParamAndBodyPropertyRequestObject
+
+	request.Name = name
+
+	var body SameNameParamAndBodyPropertyJSONRequestBody
+	var err error
+	// A request validator built on kin-openapi's openapi3filter with
+	// KeepValidatedValue leaves the value it validated on the body. Bind
+	// that value, matching member names exactly, so the handler receives
+	// what was validated instead of a second, case-insensitive decode.
+	if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+		err = ctx.ReadJSON(&body)
+	} else {
+		// ReadJSON runs the application's validator after decoding; keep that.
+		err = ctx.Application().Validate(&body)
+	}
+	if err != nil {
+		if !errors.Is(err, io.EOF) {
+			ctx.StopWithError(http.StatusBadRequest, err)
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx iris.Context, request any) (any, error) {
+		return sh.ssi.SameNameParamAndBodyProperty(ctx, request.(SameNameParamAndBodyPropertyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SameNameParamAndBodyProperty")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		ctx.StopWithError(http.StatusInternalServerError, err)
+		return
+	} else if validResponse, ok := response.(SameNameParamAndBodyPropertyResponseObject); ok {
+		if err := validResponse.VisitSameNameParamAndBodyPropertyResponse(ctx); err != nil {
+			ctx.StopWithError(http.StatusInternalServerError, err)
+			return
+		}
+	} else if response != nil {
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1333,7 +1644,7 @@ func (sh *strictHandler) TextExample(ctx iris.Context) {
 		request.Body = &body
 	}
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.TextExample(ctx, request.(TextExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1343,15 +1654,15 @@ func (sh *strictHandler) TextExample(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(TextExampleResponseObject); ok {
 		if err := validResponse.VisitTextExampleResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1362,7 +1673,7 @@ func (sh *strictHandler) UnknownExample(ctx iris.Context) {
 
 	request.Body = ctx.Request().Body
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.UnknownExample(ctx, request.(UnknownExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1372,15 +1683,15 @@ func (sh *strictHandler) UnknownExample(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(UnknownExampleResponseObject); ok {
 		if err := validResponse.VisitUnknownExampleResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1393,7 +1704,7 @@ func (sh *strictHandler) UnspecifiedContentType(ctx iris.Context) {
 
 	request.Body = ctx.Request().Body
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.UnspecifiedContentType(ctx, request.(UnspecifiedContentTypeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1403,15 +1714,15 @@ func (sh *strictHandler) UnspecifiedContentType(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(UnspecifiedContentTypeResponseObject); ok {
 		if err := validResponse.VisitUnspecifiedContentTypeResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1431,7 +1742,7 @@ func (sh *strictHandler) URLEncodedExample(ctx iris.Context) {
 	}
 	request.Body = &body
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.URLEncodedExample(ctx, request.(URLEncodedExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1441,15 +1752,15 @@ func (sh *strictHandler) URLEncodedExample(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(URLEncodedExampleResponseObject); ok {
 		if err := validResponse.VisitURLEncodedExampleResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1461,7 +1772,18 @@ func (sh *strictHandler) HeadersExample(ctx iris.Context, params HeadersExampleP
 	request.Params = params
 
 	var body HeadersExampleJSONRequestBody
-	if err := ctx.ReadJSON(&body); err != nil {
+	var err error
+	// A request validator built on kin-openapi's openapi3filter with
+	// KeepValidatedValue leaves the value it validated on the body. Bind
+	// that value, matching member names exactly, so the handler receives
+	// what was validated instead of a second, case-insensitive decode.
+	if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+		err = ctx.ReadJSON(&body)
+	} else {
+		// ReadJSON runs the application's validator after decoding; keep that.
+		err = ctx.Application().Validate(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			ctx.StopWithError(http.StatusBadRequest, err)
 			return
@@ -1470,7 +1792,7 @@ func (sh *strictHandler) HeadersExample(ctx iris.Context, params HeadersExampleP
 		request.Body = &body
 	}
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.HeadersExample(ctx, request.(HeadersExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1480,15 +1802,15 @@ func (sh *strictHandler) HeadersExample(ctx iris.Context, params HeadersExampleP
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(HeadersExampleResponseObject); ok {
 		if err := validResponse.VisitHeadersExampleResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1498,7 +1820,18 @@ func (sh *strictHandler) UnionExample(ctx iris.Context) {
 	var request UnionExampleRequestObject
 
 	var body UnionExampleJSONRequestBody
-	if err := ctx.ReadJSON(&body); err != nil {
+	var err error
+	// A request validator built on kin-openapi's openapi3filter with
+	// KeepValidatedValue leaves the value it validated on the body. Bind
+	// that value, matching member names exactly, so the handler receives
+	// what was validated instead of a second, case-insensitive decode.
+	if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+		err = ctx.ReadJSON(&body)
+	} else {
+		// ReadJSON runs the application's validator after decoding; keep that.
+		err = ctx.Application().Validate(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			ctx.StopWithError(http.StatusBadRequest, err)
 			return
@@ -1507,7 +1840,7 @@ func (sh *strictHandler) UnionExample(ctx iris.Context) {
 		request.Body = &body
 	}
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.UnionExample(ctx, request.(UnionExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1517,15 +1850,15 @@ func (sh *strictHandler) UnionExample(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(UnionExampleResponseObject); ok {
 		if err := validResponse.VisitUnionExampleResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -1535,27 +1868,31 @@ func (sh *strictHandler) UnionExample(ctx iris.Context) {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

@@ -31,12 +31,12 @@ type OneOf2things struct {
 	union json.RawMessage
 }
 
-// OneOf2things0 defines model for .
+// OneOf2things0 defines model for OneOf2things.0.
 type OneOf2things0 struct {
 	Id int `json:"id"`
 }
 
-// OneOf2things1 defines model for .
+// OneOf2things1 defines model for OneOf2things.1.
 type OneOf2things1 struct {
 	Id openapi_types.UUID `json:"id"`
 }
@@ -53,20 +53,20 @@ type Pet struct {
 // AsOneOf2things0 returns the union data inside the OneOf2things as a OneOf2things0
 func (t OneOf2things) AsOneOf2things0() (OneOf2things0, error) {
 	var body OneOf2things0
-	err := json.Unmarshal(t.union, &body)
+	err := runtime.JSONUnmarshal(t.union, &body)
 	return body, err
 }
 
 // FromOneOf2things0 overwrites any union data inside the OneOf2things as the provided OneOf2things0
 func (t *OneOf2things) FromOneOf2things0(v OneOf2things0) error {
-	b, err := json.Marshal(v)
+	b, err := runtime.JSONMarshal(v)
 	t.union = b
 	return err
 }
 
 // MergeOneOf2things0 performs a merge with any union data inside the OneOf2things, using the provided OneOf2things0
 func (t *OneOf2things) MergeOneOf2things0(v OneOf2things0) error {
-	b, err := json.Marshal(v)
+	b, err := runtime.JSONMarshal(v)
 	if err != nil {
 		return err
 	}
@@ -79,20 +79,20 @@ func (t *OneOf2things) MergeOneOf2things0(v OneOf2things0) error {
 // AsOneOf2things1 returns the union data inside the OneOf2things as a OneOf2things1
 func (t OneOf2things) AsOneOf2things1() (OneOf2things1, error) {
 	var body OneOf2things1
-	err := json.Unmarshal(t.union, &body)
+	err := runtime.JSONUnmarshal(t.union, &body)
 	return body, err
 }
 
 // FromOneOf2things1 overwrites any union data inside the OneOf2things as the provided OneOf2things1
 func (t *OneOf2things) FromOneOf2things1(v OneOf2things1) error {
-	b, err := json.Marshal(v)
+	b, err := runtime.JSONMarshal(v)
 	t.union = b
 	return err
 }
 
 // MergeOneOf2things1 performs a merge with any union data inside the OneOf2things, using the provided OneOf2things1
 func (t *OneOf2things) MergeOneOf2things1(v OneOf2things1) error {
-	b, err := json.Marshal(v)
+	b, err := runtime.JSONMarshal(v)
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func NewGetHttpPetRequest(server string, petId string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/pets/%s", pathParam0)
+	operationPath := "/api/pets/" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -363,7 +363,7 @@ func ParseGetHttpPetResponse(rsp *http.Response) (*GetHttpPetResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Pet
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -398,7 +398,7 @@ func (siw *ServerInterfaceWrapper) GetHttpPet(w http.ResponseWriter, r *http.Req
 	// ------------- Path parameter "petId" -------------
 	var petId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "petId", mux.Vars(r)["petId"], &petId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "petId", mux.Vars(r)["petId"], &petId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "petId", Err: err})
 		return
@@ -522,6 +522,7 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
+
 	wrapper := ServerInterfaceWrapper{
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,

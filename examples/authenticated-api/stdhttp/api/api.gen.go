@@ -10,7 +10,6 @@ import (
 	"compress/flate"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
+	"github.com/oapi-codegen/runtime"
 )
 
 // Error defines model for Error.
@@ -202,7 +202,7 @@ func NewListThingsRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/things")
+	operationPath := "/things"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -223,7 +223,7 @@ func NewListThingsRequest(server string) (*http.Request, error) {
 // NewAddThingRequest calls the generic AddThing builder with application/json body
 func NewAddThingRequest(server string, body AddThingJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,7 @@ func NewAddThingRequestWithBody(server string, contentType string, body io.Reade
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/things")
+	operationPath := "/things"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -473,7 +473,7 @@ func ParseListThingsResponse(rsp *http.Response) (*ListThingsResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []ThingWithID
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -499,7 +499,7 @@ func ParseAddThingResponse(rsp *http.Response) (*AddThingResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 		var dest []ThingWithID
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON201 = &dest
@@ -687,17 +687,17 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"xFTBbts4EP2VwewCexFsJ1nsQTcHyQIOCrRoDeQQBwgjji22MskMR3GNQP9ekJQcNU7T9tSLLZLDN/Pe",
-	"vOETVm7rnSUrAcsnDFVNW5U+L5kdxw/PzhOLobRdOU3xX1Oo2HgxzmKZgyGdFbh2vFWCJRorZ6dYoOw9",
-	"5SVtiLErcEshqM0PgYbjw9UgbOwGu65ApofWMGksb7BPOITfdgUu6xh4VLZV25TtbbwUdUC5NlIvLuIt",
-	"1TTv11jePOHfTGss8a/ps27TXrRpTt0VL3MbHX/Hqvz37yuqvKjFaLztbuNuoKplI/tPMU+GPCfFxPNW",
-	"6ri6T6v/hwRX10sscitjgnz6nLAW8dhFYGPX7rgFcwv0VW19QzD/sIBdbaoa2kABMhKI+0IWQuU8BVBW",
-	"w9X1ElSspUAx0sQksTSyYiolpBPOZcbEAh+JQ051MplNZtEPzpNV3mCJZ2mrQK+kTlSnEmVNnxuS43I/",
-	"krRsAyhoTBBwa8gXJnBOlWoDxXUAsto7YwW0o2D/EXCPxGx0PKaV3TTuXjUwSF2AEei7EaEjw7XjxLKn",
-	"ZZydrCym2jktFxpLfGeCLHPFsZ/BOxtyz05nszxAVsgmIsr7poeafg6RzTCByTZC23Txp57rjdodWqyY",
-	"1T73+HuxXoqUY7wLrwg71zpST4EgLup0JPFyLG04aBpScNZ0ZQdRIVsyWWak7V0GK3d32VNgLDjWyWjg",
-	"iePggFrZHRuh1ySfa51HLw8QBTl3ev9bWv/CWB+LOX/WxthALBMYzBjp5z3SfdTOSA3KwuICx4Mu3FJ3",
-	"5JSTP+6U5ZjBcsQAWmseWoo8xo9Teh3Hz9INDn3N79ibsTHiWwAAAP//",
+	"xFRBb9s8DP0rBL8P2MVI0nbYwbcU7YAUAzZsAXpoClS1mFibQ6kS3Swo/N8HSXHiNV23nXaxRYl6JB8f",
+	"9YSVXTvLxBKwfMJQ1bRWaXnpvfVx4bx15MVQ2q6spvjXFCpvnBjLWGZnSGcFLq1fK8ESDcvZKRYoW0fZ",
+	"pBV57ApcUwhq9Uug/nh/NYg3vMKuK9DTQ2s8aSxvcBewd7/tCpzX0fEobVbrFO11vOS1R7k2Us8u4i3V",
+	"NB+XWN484f+elljif+MDb+MdaeMcuiuexzY6foesvHv7AivPcjEab7vbuBuoar2R7ZcYJ0Oek/Lkp63U",
+	"0bpP1vs+wNX1HIvcyhggnx4C1iIOuwhseGmPWzBloO9q7RqC6acZbGpT1dAGCpCRQOw3YgiVdRRAsYar",
+	"6zmomEuBYqSJQWJqxGIqJaQTzmXGxAIfyYcc6mQ0GU2iHqwjVs5giWdpq0CnpE6ljiXSmpYrkuN0P5O0",
+	"ngMoaEwQsEvIF0ZwTpVqA0U7ALF21rCAthT4jYB9JO+Njse04FVj71UDPdUFGIFdNyJ0rHBpPahDWcby",
+	"aMGYcvfJnGks8YMJMs8Zx34GZznknp1OJnmAWIhTIcq5Zgc1/hosHyYwrozQOl38reZ2Qu32LVbeq23u",
+	"8c9kPScp+zgbXiB2qnUsPTmC2MjTEcXzIbVhz2lIzpnTBfekQpZkksyA27sMVm7usqbAMFivk9DAkY+D",
+	"A2rBG2+EXqJ8qnUevTxAFOTc6u1fcf0HY31M5vTAjeFAXkbQizGWn/dI77w2RmpQDLMLHA66+Ja6I6Wc",
+	"/HOlzIcVzAcVQMvmoaVYx/BxSq/j8Fm6wb6v+R171Td6/BgA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

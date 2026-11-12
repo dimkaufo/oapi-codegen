@@ -6,7 +6,6 @@ package gorilla
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,15 +13,16 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/oapi-codegen/runtime"
 )
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams2" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body = string
 
-// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostObject.
+// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostObject for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
 // PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
@@ -222,19 +222,20 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
+
 	wrapper := ServerInterfaceWrapper{
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	r.HandleFunc(options.BaseURL+"/get-multibody", wrapper.GetGetMultibody).Methods(http.MethodGet)
-
 	r.HandleFunc(options.BaseURL+"/object", wrapper.GetObject).Methods(http.MethodGet)
 
-	r.HandleFunc(options.BaseURL+"/post-multibody", wrapper.PostPostMultibody).Methods(http.MethodPost)
+	r.HandleFunc(options.BaseURL+"/get-multibody", wrapper.GetGetMultibody).Methods(http.MethodGet)
 
 	r.HandleFunc(options.BaseURL+"/post-object", wrapper.PostPostObject).Methods(http.MethodPost)
+
+	r.HandleFunc(options.BaseURL+"/post-multibody", wrapper.PostPostMultibody).Methods(http.MethodPost)
 
 	return r
 }
@@ -251,7 +252,7 @@ type GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystream
 func (response GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsResponse) VisitGetGetMultibodyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"")
@@ -265,7 +266,7 @@ type GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystream
 func (response GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Response) VisitGetGetMultibodyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams2\"")
@@ -286,7 +287,7 @@ type GetObject200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRespo
 func (response GetObject200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsResponse) VisitGetObjectResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"")
@@ -328,8 +329,11 @@ type StrictServerInterface interface {
 	PostPostObject(ctx context.Context, request PostPostObjectRequestObject) (PostPostObjectResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -348,6 +352,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -361,7 +375,7 @@ type strictHandler struct {
 func (sh *strictHandler) GetGetMultibody(w http.ResponseWriter, r *http.Request) {
 	var request GetGetMultibodyRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetGetMultibody(ctx, request.(GetGetMultibodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -385,7 +399,7 @@ func (sh *strictHandler) GetGetMultibody(w http.ResponseWriter, r *http.Request)
 func (sh *strictHandler) GetObject(w http.ResponseWriter, r *http.Request) {
 	var request GetObjectRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetObject(ctx, request.(GetObjectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -412,7 +426,7 @@ func (sh *strictHandler) PostPostMultibody(w http.ResponseWriter, r *http.Reques
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"") {
 
 		var body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := runtime.BindJSONBody(r, &body); err != nil {
 			if !errors.Is(err, io.EOF) {
 				sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 				return
@@ -424,7 +438,7 @@ func (sh *strictHandler) PostPostMultibody(w http.ResponseWriter, r *http.Reques
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams2\"") {
 
 		var body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2RequestBody
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := runtime.BindJSONBody(r, &body); err != nil {
 			if !errors.Is(err, io.EOF) {
 				sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 				return
@@ -434,7 +448,7 @@ func (sh *strictHandler) PostPostMultibody(w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PostPostMultibody(ctx, request.(PostPostMultibodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -459,7 +473,7 @@ func (sh *strictHandler) PostPostObject(w http.ResponseWriter, r *http.Request) 
 	var request PostPostObjectRequestObject
 
 	var body PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		if !errors.Is(err, io.EOF) {
 			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 			return
@@ -468,7 +482,7 @@ func (sh *strictHandler) PostPostObject(w http.ResponseWriter, r *http.Request) 
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PostPostObject(ctx, request.(PostPostObjectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

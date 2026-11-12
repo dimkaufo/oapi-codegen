@@ -8,7 +8,6 @@ package serversstrictbuffering
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -27,12 +26,12 @@ type Response struct {
 	Value *string `json:"value,omitempty"`
 }
 
-// MultipartEndpointMultipartBody defines parameters for MultipartEndpoint.
+// MultipartEndpointMultipartBody defines body for MultipartEndpoint for multipart/form-data ContentType.
 type MultipartEndpointMultipartBody struct {
 	Field *string `json:"field,omitempty"`
 }
 
-// TextEndpointTextBody defines parameters for TextEndpoint.
+// TextEndpointTextBody defines body for TextEndpoint for text/plain ContentType.
 type TextEndpointTextBody = string
 
 // FormdataEndpointFormdataRequestBody defines body for FormdataEndpoint for application/x-www-form-urlencoded ContentType.
@@ -265,11 +264,11 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/binary", wrapper.BinaryEndpoint)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/formdata", wrapper.FormdataEndpoint)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/json", wrapper.JsonEndpoint)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/multipart", wrapper.MultipartEndpoint)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/text", wrapper.TextEndpoint)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/formdata", wrapper.FormdataEndpoint)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/multipart", wrapper.MultipartEndpoint)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/binary", wrapper.BinaryEndpoint)
 
 	return m
 }
@@ -337,7 +336,7 @@ type JsonEndpoint200JSONResponse Response
 func (response JsonEndpoint200JSONResponse) VisitJsonEndpointResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -381,7 +380,7 @@ func (response TextEndpoint200TextResponse) VisitTextEndpointResponse(w http.Res
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(200)
 
-	_, err := w.Write([]byte(response))
+	_, err := w.Write([]byte(fmt.Sprint(response)))
 	return err
 }
 
@@ -404,8 +403,11 @@ type StrictServerInterface interface {
 	TextEndpoint(ctx context.Context, request TextEndpointRequestObject) (TextEndpointResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -424,6 +426,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -439,7 +451,7 @@ func (sh *strictHandler) BinaryEndpoint(w http.ResponseWriter, r *http.Request) 
 
 	request.Body = r.Body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.BinaryEndpoint(ctx, request.(BinaryEndpointRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -474,7 +486,7 @@ func (sh *strictHandler) FormdataEndpoint(w http.ResponseWriter, r *http.Request
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.FormdataEndpoint(ctx, request.(FormdataEndpointRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -499,13 +511,13 @@ func (sh *strictHandler) JsonEndpoint(w http.ResponseWriter, r *http.Request) {
 	var request JsonEndpointRequestObject
 
 	var body JsonEndpointJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.JsonEndpoint(ctx, request.(JsonEndpointRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -536,7 +548,7 @@ func (sh *strictHandler) MultipartEndpoint(w http.ResponseWriter, r *http.Reques
 		request.Body = reader
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.MultipartEndpoint(ctx, request.(MultipartEndpointRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -568,7 +580,7 @@ func (sh *strictHandler) TextEndpoint(w http.ResponseWriter, r *http.Request) {
 	body := TextEndpointTextRequestBody(data)
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.TextEndpoint(ctx, request.(TextEndpointRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

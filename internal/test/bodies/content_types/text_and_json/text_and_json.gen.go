@@ -8,12 +8,13 @@ package textandjson
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // Success defines model for Success.
@@ -119,7 +120,7 @@ func NewGetTestRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/test")
+	operationPath := "/v1/test"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -255,7 +256,7 @@ func ParseGetTestResponse(rsp *http.Response) (*GetTestResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Success
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -436,7 +437,7 @@ type GetTest200JSONResponse struct{ SuccessJSONResponse }
 func (response GetTest200JSONResponse) VisitGetTestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.SuccessJSONResponse); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -452,7 +453,7 @@ func (response GetTest401TextResponse) VisitGetTestResponse(w http.ResponseWrite
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(401)
 
-	_, err := w.Write([]byte(response))
+	_, err := w.Write([]byte(fmt.Sprint(response)))
 	return err
 }
 
@@ -463,8 +464,11 @@ type StrictServerInterface interface {
 	GetTest(ctx context.Context, request GetTestRequestObject) (GetTestResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -483,6 +487,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -496,7 +510,7 @@ type strictHandler struct {
 func (sh *strictHandler) GetTest(w http.ResponseWriter, r *http.Request) {
 	var request GetTestRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetTest(ctx, request.(GetTestRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

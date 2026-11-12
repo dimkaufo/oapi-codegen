@@ -14,16 +14,21 @@ type Example struct {
 	Value *string `json:"value,omitempty"`
 }
 
+// SameName defines model for sameName.
+type SameName struct {
+	Name *string `json:"name,omitempty" param:"name"`
+}
+
 // Reusableresponse defines model for reusableresponse.
 type Reusableresponse = Example
 
-// MultipleRequestAndResponseTypesTextBody defines parameters for MultipleRequestAndResponseTypes.
+// MultipleRequestAndResponseTypesTextBody defines body for MultipleRequestAndResponseTypes for text/plain ContentType.
 type MultipleRequestAndResponseTypesTextBody = string
 
-// RequiredTextBodyTextBody defines parameters for RequiredTextBody.
+// RequiredTextBodyTextBody defines body for RequiredTextBody for text/plain ContentType.
 type RequiredTextBodyTextBody = string
 
-// TextExampleTextBody defines parameters for TextExample.
+// TextExampleTextBody defines body for TextExample for text/plain ContentType.
 type TextExampleTextBody = string
 
 // HeadersExampleParams defines parameters for HeadersExample.
@@ -32,10 +37,10 @@ type HeadersExampleParams struct {
 	Header2 *int   `json:"header2,omitempty"`
 }
 
-// UnionExample200JSONResponseBody0 defines parameters for UnionExample.
+// UnionExample200JSONResponseBody0 defines model for UnionExample200JSONResponseBody.0.
 type UnionExample200JSONResponseBody0 = string
 
-// UnionExample200JSONResponseBody defines parameters for UnionExample.
+// UnionExample200JSONResponseBody defines the 200 response body for UnionExample for application/json ContentType.
 type UnionExample200JSONResponseBody struct {
 	union json.RawMessage
 }
@@ -70,6 +75,12 @@ type RequiredTextBodyTextRequestBody = RequiredTextBodyTextBody
 // ReusableResponsesJSONRequestBody defines body for ReusableResponses for application/json ContentType.
 type ReusableResponsesJSONRequestBody = Example
 
+// ReusableURLEncodedResponseFormdataRequestBody defines body for ReusableURLEncodedResponse for application/x-www-form-urlencoded ContentType.
+type ReusableURLEncodedResponseFormdataRequestBody = Example
+
+// SameNameParamAndBodyPropertyJSONRequestBody defines body for SameNameParamAndBodyProperty for application/json ContentType.
+type SameNameParamAndBodyPropertyJSONRequestBody = SameName
+
 // TextExampleTextRequestBody defines body for TextExample for text/plain ContentType.
 type TextExampleTextRequestBody = TextExampleTextBody
 
@@ -85,20 +96,20 @@ type UnionExampleJSONRequestBody = Example
 // AsUnionExample200JSONResponseBody0 returns the union data inside the UnionExample200JSONResponseBody as a UnionExample200JSONResponseBody0
 func (t UnionExample200JSONResponseBody) AsUnionExample200JSONResponseBody0() (UnionExample200JSONResponseBody0, error) {
 	var body UnionExample200JSONResponseBody0
-	err := json.Unmarshal(t.union, &body)
+	err := runtime.JSONUnmarshal(t.union, &body)
 	return body, err
 }
 
 // FromUnionExample200JSONResponseBody0 overwrites any union data inside the UnionExample200JSONResponseBody as the provided UnionExample200JSONResponseBody0
 func (t *UnionExample200JSONResponseBody) FromUnionExample200JSONResponseBody0(v UnionExample200JSONResponseBody0) error {
-	b, err := json.Marshal(v)
+	b, err := runtime.JSONMarshal(v)
 	t.union = b
 	return err
 }
 
 // MergeUnionExample200JSONResponseBody0 performs a merge with any union data inside the UnionExample200JSONResponseBody, using the provided UnionExample200JSONResponseBody0
 func (t *UnionExample200JSONResponseBody) MergeUnionExample200JSONResponseBody0(v UnionExample200JSONResponseBody0) error {
-	b, err := json.Marshal(v)
+	b, err := runtime.JSONMarshal(v)
 	if err != nil {
 		return err
 	}
@@ -111,20 +122,20 @@ func (t *UnionExample200JSONResponseBody) MergeUnionExample200JSONResponseBody0(
 // AsExample returns the union data inside the UnionExample200JSONResponseBody as a Example
 func (t UnionExample200JSONResponseBody) AsExample() (Example, error) {
 	var body Example
-	err := json.Unmarshal(t.union, &body)
+	err := runtime.JSONUnmarshal(t.union, &body)
 	return body, err
 }
 
 // FromExample overwrites any union data inside the UnionExample200JSONResponseBody as the provided Example
 func (t *UnionExample200JSONResponseBody) FromExample(v Example) error {
-	b, err := json.Marshal(v)
+	b, err := runtime.JSONMarshal(v)
 	t.union = b
 	return err
 }
 
 // MergeExample performs a merge with any union data inside the UnionExample200JSONResponseBody, using the provided Example
 func (t *UnionExample200JSONResponseBody) MergeExample(v Example) error {
-	b, err := json.Marshal(v)
+	b, err := runtime.JSONMarshal(v)
 	if err != nil {
 		return err
 	}

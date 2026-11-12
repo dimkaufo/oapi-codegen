@@ -5,7 +5,6 @@ package prunedeps
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	externalRef0 "github.com/oapi-codegen/oapi-codegen/v2/internal/test/references/multipackage/pruned_deps/deps"
+	"github.com/oapi-codegen/runtime"
 )
 
 // Thing defines model for Thing.
@@ -141,7 +141,7 @@ func NewGetThingsRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/my/path")
+	operationPath := "/api/my/path"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -213,6 +213,12 @@ type ClientWithResponsesInterface interface {
 	GetThingsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetThingsResponse, error)
 }
 
+// GetThingsResponse304Headers the declared response headers of an HTTP 304 response for GetThings
+type GetThingsResponse304Headers struct {
+	CacheControl *string
+	ETag         *string
+}
+
 type GetThingsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -226,6 +232,8 @@ type GetThingsResponse struct {
 	JSON404 *N404
 	// JSON500 the response for an HTTP 500 `application/json` response
 	JSON500 *externalRef0.DefaultError
+	// Headers304 the parsed response headers for an HTTP 304 response
+	Headers304 *GetThingsResponse304Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -313,35 +321,38 @@ func ParseGetThingsResponse(rsp *http.Response) (*GetThingsResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest ThingResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
+	case rsp.StatusCode == 304:
+		break // No content-type
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest externalRef0.N401
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
 		var dest externalRef0.N403
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest N404
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 500:
 		var dest externalRef0.DefaultError
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON500 = &dest
@@ -352,6 +363,26 @@ func ParseGetThingsResponse(rsp *http.Response) (*GetThingsResponse, error) {
 	case rsp.StatusCode == 403:
 		// Content-type (text/plain) unsupported
 
+	}
+
+	switch {
+	case rsp.StatusCode == 304:
+		var headers GetThingsResponse304Headers
+		if values := rsp.Header.Values("Cache-Control"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "Cache-Control", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.CacheControl = &value
+		}
+		if values := rsp.Header.Values("ETag"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "ETag", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.ETag = &value
+		}
+		response.Headers304 = &headers
 	}
 
 	return response, nil
@@ -365,7 +396,6 @@ type ServerInterface interface {
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
-
 type Unimplemented struct{}
 
 // GetThings list things
@@ -504,6 +534,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
+
 	wrapper := ServerInterfaceWrapper{
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,

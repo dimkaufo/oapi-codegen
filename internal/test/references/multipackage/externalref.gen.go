@@ -18,12 +18,16 @@ import (
 	externalRef1 "github.com/oapi-codegen/oapi-codegen/v2/internal/test/references/multipackage/petstore"
 )
 
+const (
+	BearerAuthScopes = externalRef0.BearerAuthScopes
+)
+
 // Container defines model for Container.
 type Container struct {
-	ObjectA *externalRef0.ObjectA   `json:"object_a,omitempty"`
-	ObjectB *package_b.ObjectB      `json:"object_b,omitempty"`
-	ObjectC *map[string]interface{} `json:"object_c,omitempty"`
-	Pet     *externalRef1.Pet       `json:"pet,omitempty"`
+	ObjectA *externalRef0.ObjectA `json:"object_a,omitempty"`
+	ObjectB *package_b.ObjectB    `json:"object_b,omitempty"`
+	ObjectC *map[string]any       `json:"object_c,omitempty"`
+	Pet     *externalRef1.Pet     `json:"pet,omitempty"`
 }
 
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
@@ -31,15 +35,16 @@ type Container struct {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"vFVNb9swDP0rAbej62bYsINvbXdfDtupKAxGZhxt1scouk1R+L8PkmPHjTs0G7JeEkUUn/jeI5UnUM54",
-	"Z8lKgOIJgtqSwbS8cVZQW+L4w7PzxKIphdz6BykpMa7fM22ggHeXB6DLPcqlR/UTa7oqgydVfk1ZV9Bl",
-	"A8D6RIDrKcD1BEC9BjCe6zLwJK8dDw9Y18QX6HU5rD1JEMdUMm1CuSWsQmkwCHEZWJUGtS2ZgmtZUSid",
-	"JxuzVyTQdUeVYlVp0c5is5roKdxSBvLoCYr98VTui+LNvLBoKH7v84OwtvUZNO4OJRyFTi0hIpxP0BsU",
-	"qh0/zq/XVfykHRrfEBQfMtg4NihQgLby+ROM4morVBNHdYaaxzT44upwODqSOHYmg93FwIRdK8QXxlXU",
-	"RHiX7yP5wDFPsXwsPoOdaQ6agRoC5xVr1bf6c53URMG3GYKRdpfNXFr+o02Vq2tNc6My8Fsn7js3fVMI",
-	"mTBvymP9h5yp0ciME6ceGL2nqp/TZJOgtAm7oqBY+zjSEYtk0ccW2i5kS4skGWRAtjVQ3ALeo25w3cQ9",
-	"T7bqKwquqeDuBUKC9XMub+PaN+xvP0WNLgOmX63muHXbqzp14u4s4xPbeeZcemDPOTSR9x8el7/o1P/y",
-	"fsTSjgUQTG9sHC27celqLWlEIIN74tB3Zfor6BlCAR/zZb6MDqFsI7+u+x0AAP//",
+	"vFVNb9swDP0rAbej6nbYsINvbXdfgW2nojAYmbG12ZJG0f1A4f8+SI4T127RbMh6aRVRfH58j5QeQbvW",
+	"O0tWAuSPEHRNLablpbOCxhLHH56dJxZDKeTWP0lLgXH9nmkDObw73QOdblFOPepfWNF5ETzp4mvKOode",
+	"jQDrAwEupgAXEwD9GsDuXK/Ak7x2PNxhVRGfoDfFuPYkQRxTwbQJRU1YhqLFIMRFYF20aGzBFFzHmkLh",
+	"PNmYfUUCfT9jimVpxDiLzdVET+GOFMiDJ8i3xxPdZ8VbeGGxpfh/mx+Eja2OoHG/pzALHUohIhxP0EsU",
+	"qhw/LD9vyviX7rH1DUH+QcHGcYsCORgrnz/BTlxjhSriqM7IeZcGX1wVQC2KmDuj4P5krIRdJ8QnrSup",
+	"ifAu20ayscYsxbIdeQX3bbPXDPQYOK5YVyRLnfREwbcZgl3ZvVq4dPaPNpWuqgwtjVLgayfuBzdDUwi1",
+	"YdmUc/3HnKnRyIwTp+4YvadymNNkk6B0CbukoNn4ONIRi2Q1xFbGrqSmVZIMFJDtWsivAW/RNLhu4p4n",
+	"Ww6MgmtKuHmmIMHqaS1v49p3HL5+iBq9AqbfneG4dT2oOnXi5ijjE9t54RzJkYcm1v3C5fIXnfpf7o9I",
+	"bS6A4HjHku7YyMO32AkD6wtCJj7vpH6xbZ4mzZ7qSf7iJXqKndov0lmn7b00tYgf+Bm7cUkZI2mCQcEt",
+	"cRiGJr1UgwGQw8fsLDuLDYRSx0L6/s8A",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

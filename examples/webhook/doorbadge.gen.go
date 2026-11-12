@@ -8,7 +8,6 @@ package doorbadge
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -251,7 +250,7 @@ func NewDeregisterWebhookRequest(server string, id openapi_types.UUID) (*http.Re
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/webhook/%s", pathParam0)
+	operationPath := "/api/webhook/" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -272,7 +271,7 @@ func NewDeregisterWebhookRequest(server string, id openapi_types.UUID) (*http.Re
 // NewRegisterWebhookRequest calls the generic RegisterWebhook builder with application/json body
 func NewRegisterWebhookRequest(server string, kind RegisterWebhookParamsKind, body RegisterWebhookJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -296,7 +295,7 @@ func NewRegisterWebhookRequestWithBody(server string, kind RegisterWebhookParams
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/api/webhook/%s", pathParam0)
+	operationPath := "/api/webhook/" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -540,9 +539,12 @@ func ParseDeregisterWebhookResponse(rsp *http.Response) (*DeregisterWebhookRespo
 	}
 
 	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSONDefault = &dest
@@ -568,14 +570,14 @@ func ParseRegisterWebhookResponse(rsp *http.Response) (*RegisterWebhookResponse,
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
 		var dest WebhookRegistrationResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSONDefault = &dest
@@ -713,7 +715,7 @@ func (p *WebhookInitiator) ExitEvent(ctx context.Context, targetURL string, body
 // NewEnterEventWebhookRequest builds a application/json POST request for the enterEvent webhook
 func NewEnterEventWebhookRequest(targetURL string, body EnterEventJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -744,7 +746,7 @@ func NewEnterEventWebhookRequestWithBody(targetURL string, contentType string, b
 // NewExitEventWebhookRequest builds a application/json POST request for the exitEvent webhook
 func NewExitEventWebhookRequest(targetURL string, body ExitEventJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -800,7 +802,7 @@ func (siw *ServerInterfaceWrapper) DeregisterWebhook(w http.ResponseWriter, r *h
 	// ------------- Path parameter "id" -------------
 	var id openapi_types.UUID
 
-	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	err = runtime.BindStyledParameterWithOptions("simple", "id", r.PathValue("id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
 		return
@@ -826,7 +828,7 @@ func (siw *ServerInterfaceWrapper) RegisterWebhook(w http.ResponseWriter, r *htt
 	// ------------- Path parameter "kind" -------------
 	var kind RegisterWebhookParamsKind
 
-	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "kind", r.PathValue("kind"), &kind, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "kind", Err: err})
 		return
@@ -963,8 +965,8 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/webhook/{id}", wrapper.DeregisterWebhook)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/api/webhook/{kind}", wrapper.RegisterWebhook)
+	m.HandleFunc(http.MethodDelete+" "+options.BaseURL+"/api/webhook/{id}", wrapper.DeregisterWebhook)
 
 	return m
 }

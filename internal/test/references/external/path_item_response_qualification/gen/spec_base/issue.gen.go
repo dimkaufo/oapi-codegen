@@ -6,7 +6,6 @@ package spec_base
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	externalRef0 "github.com/oapi-codegen/oapi-codegen/v2/internal/test/references/external/path_item_response_qualification/gen/spec_ext"
+	"github.com/oapi-codegen/runtime"
 )
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
@@ -133,7 +133,7 @@ func NewGetV1OutcomeRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/outcome")
+	operationPath := "/v1/outcome"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -160,7 +160,7 @@ func NewGetV1VersionRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/v1/version")
+	operationPath := "/v1/version"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -353,7 +353,7 @@ func ParseGetV1OutcomeResponse(rsp *http.Response) (*GetV1OutcomeResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest externalRef0.OutcomeResult
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -379,7 +379,7 @@ func ParseGetV1VersionResponse(rsp *http.Response) (*GetV1VersionResponse, error
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest externalRef0.VersionGetResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -400,7 +400,6 @@ type ServerInterface interface {
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
-
 type Unimplemented struct{}
 
 // (GET /v1/outcome)
@@ -557,6 +556,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
+
 	wrapper := ServerInterfaceWrapper{
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,
@@ -587,7 +587,7 @@ type GetV1Outcome200JSONResponse struct {
 func (response GetV1Outcome200JSONResponse) VisitGetV1OutcomeResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.OutcomeJSONResponse); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -610,7 +610,7 @@ type GetV1Version200JSONResponse struct {
 func (response GetV1Version200JSONResponse) VisitGetV1VersionResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.VersionGetResponseJSONResponse); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -629,8 +629,11 @@ type StrictServerInterface interface {
 	GetV1Version(ctx context.Context, request GetV1VersionRequestObject) (GetV1VersionResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -649,6 +652,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -662,7 +675,7 @@ type strictHandler struct {
 func (sh *strictHandler) GetV1Outcome(w http.ResponseWriter, r *http.Request) {
 	var request GetV1OutcomeRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetV1Outcome(ctx, request.(GetV1OutcomeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -686,7 +699,7 @@ func (sh *strictHandler) GetV1Outcome(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) GetV1Version(w http.ResponseWriter, r *http.Request) {
 	var request GetV1VersionRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetV1Version(ctx, request.(GetV1VersionRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

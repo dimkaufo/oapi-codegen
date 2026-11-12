@@ -11,15 +11,16 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/oapi-codegen/runtime"
 )
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams2" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body = string
 
-// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostObject.
+// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostObject for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
 // PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
@@ -151,13 +152,13 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 		router.Use(fiber.Handler(m))
 	}
 
-	router.Get(options.BaseURL+"/get-multibody", wrapper.GetGetMultibody)
-
 	router.Get(options.BaseURL+"/object", wrapper.GetObject)
 
-	router.Post(options.BaseURL+"/post-multibody", wrapper.PostPostMultibody)
+	router.Get(options.BaseURL+"/get-multibody", wrapper.GetGetMultibody)
 
 	router.Post(options.BaseURL+"/post-object", wrapper.PostPostObject)
+
+	router.Post(options.BaseURL+"/post-multibody", wrapper.PostPostMultibody)
 
 }
 
@@ -235,8 +236,11 @@ type StrictServerInterface interface {
 	PostPostObject(ctx context.Context, request PostPostObjectRequestObject) (PostPostObjectResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx *fiber.Ctx, args any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx *fiber.Ctx, args any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares}
@@ -247,11 +251,17 @@ type strictHandler struct {
 	middlewares []StrictMiddlewareFunc
 }
 
+// validatedBodyLocalsKey is the c.Locals key under which fiber-middleware and
+// fiber-v3-middleware store the decoded request body value that passed
+// validation. It is defined here as well so generated code does not import the
+// middleware; keep it in sync with fibermiddleware.ValidatedBodyLocalsKey.
+const validatedBodyLocalsKey = "x-oapi-codegen-validated-body"
+
 // GetGetMultibody operation middleware
 func (sh *strictHandler) GetGetMultibody(ctx *fiber.Ctx) error {
 	var request GetGetMultibodyRequestObject
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.GetGetMultibody(ctx.UserContext(), request.(GetGetMultibodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -261,10 +271,10 @@ func (sh *strictHandler) GetGetMultibody(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(GetGetMultibodyResponseObject); ok {
 		if err := validResponse.VisitGetGetMultibodyResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -276,7 +286,7 @@ func (sh *strictHandler) GetGetMultibody(ctx *fiber.Ctx) error {
 func (sh *strictHandler) GetObject(ctx *fiber.Ctx) error {
 	var request GetObjectRequestObject
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.GetObject(ctx.UserContext(), request.(GetObjectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -286,10 +296,10 @@ func (sh *strictHandler) GetObject(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(GetObjectResponseObject); ok {
 		if err := validResponse.VisitGetObjectResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -304,7 +314,15 @@ func (sh *strictHandler) PostPostMultibody(ctx *fiber.Ctx) error {
 	if strings.HasPrefix(string(ctx.Request().Header.ContentType()), "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"") {
 
 		var body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody
-		if err := ctx.BodyParser(&body); err != nil {
+		var err error
+		// The validation middleware stores the value a kin-openapi validator
+		// validated in the Fiber context. Bind that value, matching member
+		// names exactly, so the handler receives what was validated instead
+		// of a second, case-insensitive decode.
+		if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+			err = ctx.BodyParser(&body)
+		}
+		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				return fiber.NewError(fiber.StatusBadRequest, err.Error())
 			}
@@ -315,7 +333,15 @@ func (sh *strictHandler) PostPostMultibody(ctx *fiber.Ctx) error {
 	if strings.HasPrefix(string(ctx.Request().Header.ContentType()), "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams2\"") {
 
 		var body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2RequestBody
-		if err := ctx.BodyParser(&body); err != nil {
+		var err error
+		// The validation middleware stores the value a kin-openapi validator
+		// validated in the Fiber context. Bind that value, matching member
+		// names exactly, so the handler receives what was validated instead
+		// of a second, case-insensitive decode.
+		if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+			err = ctx.BodyParser(&body)
+		}
+		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				return fiber.NewError(fiber.StatusBadRequest, err.Error())
 			}
@@ -324,7 +350,7 @@ func (sh *strictHandler) PostPostMultibody(ctx *fiber.Ctx) error {
 		}
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.PostPostMultibody(ctx.UserContext(), request.(PostPostMultibodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -334,10 +360,10 @@ func (sh *strictHandler) PostPostMultibody(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(PostPostMultibodyResponseObject); ok {
 		if err := validResponse.VisitPostPostMultibodyResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -350,7 +376,15 @@ func (sh *strictHandler) PostPostObject(ctx *fiber.Ctx) error {
 	var request PostPostObjectRequestObject
 
 	var body PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody
-	if err := ctx.BodyParser(&body); err != nil {
+	var err error
+	// The validation middleware stores the value a kin-openapi validator
+	// validated in the Fiber context. Bind that value, matching member
+	// names exactly, so the handler receives what was validated instead
+	// of a second, case-insensitive decode.
+	if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+		err = ctx.BodyParser(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
@@ -358,7 +392,7 @@ func (sh *strictHandler) PostPostObject(ctx *fiber.Ctx) error {
 		request.Body = &body
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.PostPostObject(ctx.UserContext(), request.(PostPostObjectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -368,10 +402,10 @@ func (sh *strictHandler) PostPostObject(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(PostPostObjectResponseObject); ok {
 		if err := validResponse.VisitPostPostObjectResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)

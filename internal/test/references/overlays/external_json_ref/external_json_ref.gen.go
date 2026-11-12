@@ -18,8 +18,8 @@ import (
 
 // Container defines model for Container.
 type Container struct {
-	ObjectA *externalRef0.ObjectA   `json:"object_a,omitempty"`
-	ObjectB *map[string]interface{} `json:"object_b,omitempty"`
+	ObjectA *externalRef0.ObjectA `json:"object_a,omitempty"`
+	ObjectB *map[string]any       `json:"object_b,omitempty"`
 }
 
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
@@ -30,7 +30,7 @@ var swaggerSpec = []string{
 	"hI/RTsMwDEX/xfDYrZN469vEB8AfVF7qbYbWsRJ3Ypry78hZBwiQ9pRY1/fc6wuEOGkUEsvQXSCHI01Y",
 	"v89RDFko+aApKiVjqlLcvVGwHv3/mGgPHTy036B2obSK4R0PtO2zUuhfqmsLpbkBdvcAX3ul/HLhMLBx",
 	"FBxff1SzNFMDdlaCbln3uP97/DlLcCJ/F3+2xHLwaA9n2ccqso2uQgMnSpmjXIePVTxRGvG8QtWRabgS",
-	"5mBzouEm1uOVBJWhg6f1Zr0B72dHb1DKZwAAAP//",
+	"5mBzouEm1uOVBJWhg6f1Zr0B72dHb1DK5wA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

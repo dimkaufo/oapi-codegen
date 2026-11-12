@@ -6,7 +6,6 @@ package gin
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,15 +13,17 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/gin-gonic/gin/binding"
+	"github.com/oapi-codegen/runtime"
 )
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams2" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body = string
 
-// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostObject.
+// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostObject for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
 // PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
@@ -138,10 +139,10 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 		ErrorHandler:       errorHandler,
 	}
 
-	router.GET(options.BaseURL+"/get-multibody", wrapper.GetGetMultibody)
 	router.GET(options.BaseURL+"/object", wrapper.GetObject)
-	router.POST(options.BaseURL+"/post-multibody", wrapper.PostPostMultibody)
+	router.GET(options.BaseURL+"/get-multibody", wrapper.GetGetMultibody)
 	router.POST(options.BaseURL+"/post-object", wrapper.PostPostObject)
+	router.POST(options.BaseURL+"/post-multibody", wrapper.PostPostMultibody)
 }
 
 type GetGetMultibodyRequestObject struct {
@@ -156,7 +157,7 @@ type GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystream
 func (response GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsResponse) VisitGetGetMultibodyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"")
@@ -170,7 +171,7 @@ type GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystream
 func (response GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Response) VisitGetGetMultibodyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams2\"")
@@ -191,7 +192,7 @@ type GetObject200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRespo
 func (response GetObject200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsResponse) VisitGetObjectResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"")
@@ -233,8 +234,11 @@ type StrictServerInterface interface {
 	PostPostObject(ctx context.Context, request PostPostObjectRequestObject) (PostPostObjectResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx *gin.Context, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx *gin.Context, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictGinServerOptions struct {
 	// RequestErrorHandlerFunc is called when a request cannot be parsed or
@@ -294,7 +298,7 @@ type strictHandler struct {
 func (sh *strictHandler) GetGetMultibody(ctx *gin.Context) {
 	var request GetGetMultibodyRequestObject
 
-	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx *gin.Context, request any) (any, error) {
 		return sh.ssi.GetGetMultibody(ctx, request.(GetGetMultibodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -318,7 +322,7 @@ func (sh *strictHandler) GetGetMultibody(ctx *gin.Context) {
 func (sh *strictHandler) GetObject(ctx *gin.Context) {
 	var request GetObjectRequestObject
 
-	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx *gin.Context, request any) (any, error) {
 		return sh.ssi.GetObject(ctx, request.(GetObjectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -345,7 +349,18 @@ func (sh *strictHandler) PostPostMultibody(ctx *gin.Context) {
 	if strings.HasPrefix(ctx.GetHeader("Content-Type"), "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"") {
 
 		var body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody
-		if err := ctx.ShouldBindJSON(&body); err != nil {
+		var err error
+		// A request validator built on kin-openapi's openapi3filter with
+		// KeepValidatedValue leaves the value it validated on the body. Bind
+		// that value, matching member names exactly, so the handler receives
+		// what was validated instead of a second, case-insensitive decode.
+		if vb, ok := ctx.Request.Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+			err = ctx.ShouldBindJSON(&body)
+		} else if binding.Validator != nil {
+			// ShouldBindJSON runs the struct validator after decoding; keep that.
+			err = binding.Validator.ValidateStruct(&body)
+		}
+		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				sh.options.RequestErrorHandlerFunc(ctx, err)
 				return
@@ -357,7 +372,18 @@ func (sh *strictHandler) PostPostMultibody(ctx *gin.Context) {
 	if strings.HasPrefix(ctx.GetHeader("Content-Type"), "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams2\"") {
 
 		var body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2RequestBody
-		if err := ctx.ShouldBindJSON(&body); err != nil {
+		var err error
+		// A request validator built on kin-openapi's openapi3filter with
+		// KeepValidatedValue leaves the value it validated on the body. Bind
+		// that value, matching member names exactly, so the handler receives
+		// what was validated instead of a second, case-insensitive decode.
+		if vb, ok := ctx.Request.Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+			err = ctx.ShouldBindJSON(&body)
+		} else if binding.Validator != nil {
+			// ShouldBindJSON runs the struct validator after decoding; keep that.
+			err = binding.Validator.ValidateStruct(&body)
+		}
+		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				sh.options.RequestErrorHandlerFunc(ctx, err)
 				return
@@ -367,7 +393,7 @@ func (sh *strictHandler) PostPostMultibody(ctx *gin.Context) {
 		}
 	}
 
-	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx *gin.Context, request any) (any, error) {
 		return sh.ssi.PostPostMultibody(ctx, request.(PostPostMultibodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -392,7 +418,18 @@ func (sh *strictHandler) PostPostObject(ctx *gin.Context) {
 	var request PostPostObjectRequestObject
 
 	var body PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody
-	if err := ctx.ShouldBindJSON(&body); err != nil {
+	var err error
+	// A request validator built on kin-openapi's openapi3filter with
+	// KeepValidatedValue leaves the value it validated on the body. Bind
+	// that value, matching member names exactly, so the handler receives
+	// what was validated instead of a second, case-insensitive decode.
+	if vb, ok := ctx.Request.Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+		err = ctx.ShouldBindJSON(&body)
+	} else if binding.Validator != nil {
+		// ShouldBindJSON runs the struct validator after decoding; keep that.
+		err = binding.Validator.ValidateStruct(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			sh.options.RequestErrorHandlerFunc(ctx, err)
 			return
@@ -401,7 +438,7 @@ func (sh *strictHandler) PostPostObject(ctx *gin.Context) {
 		request.Body = &body
 	}
 
-	handler := func(ctx *gin.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx *gin.Context, request any) (any, error) {
 		return sh.ssi.PostPostObject(ctx, request.(PostPostObjectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

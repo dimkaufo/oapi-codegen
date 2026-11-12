@@ -8,7 +8,6 @@ import (
 	"compress/flate"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -47,7 +46,7 @@ func (siw *ServerInterfaceWrapper) GetBionicleName(w http.ResponseWriter, r *htt
 	// ------------- Path parameter "name" -------------
 	var name externalRef0.BionicleName
 
-	err = runtime.BindStyledParameterWithOptions("simple", "name", mux.Vars(r)["name"], &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "name", mux.Vars(r)["name"], &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
 		return
@@ -171,6 +170,7 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
+
 	wrapper := ServerInterfaceWrapper{
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,
@@ -195,7 +195,7 @@ type GetBionicleName200JSONResponse externalRef0.Bionicle
 func (response GetBionicleName200JSONResponse) VisitGetBionicleNameResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -217,7 +217,7 @@ func (t *GetBionicleName400JSONResponse) UnmarshalJSON(b []byte) error {
 func (response GetBionicleName400JSONResponse) VisitGetBionicleNameResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -233,8 +233,11 @@ type StrictServerInterface interface {
 	GetBionicleName(ctx context.Context, request GetBionicleNameRequestObject) (GetBionicleNameResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -253,6 +256,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -268,7 +281,7 @@ func (sh *strictHandler) GetBionicleName(w http.ResponseWriter, r *http.Request,
 
 	request.Name = name
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetBionicleName(ctx, request.(GetBionicleNameRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -296,9 +309,9 @@ var swaggerSpec = []string{
 	"lFFBT/MwDP0rk7/vGDUdcOpxF8QFLtymCWWZu2Zak+B4SKjKf0dOV21jA4lenMSvfs/vDWBDH4NHzwma",
 	"AaIh0yMjldvaBe/sHt+mw7PpURobTJZcZBc8NCCvs9DOuMOZ7QwZy0igwEkzGu5AgS9/jkUB4fvBEW6g",
 	"YTqggmQ77I1M5s8ouMTk/BZyzlPzUtDieCiaKUQkdlgg/ijx+6Bz0uWIWqkJFdY7tDzSOd+G6x1fMTEo",
-	"YMdCOl0/kNLYn1d1VUNWECJ6Ex00cF/V1RxUcaBI05N8PQh/lrctshTZwAjV0wYaeERenDuuLnJZDvCf",
+	"YMd7PF0/kNLYn1d1VUNWECJ6Ex00cF/V1RxUcaBI05N8PQh/lrctshTZwAjV0wYaeERenDuuLnJZDvCf",
 	"sIUG/ulTevoE0bdzyyvxIMXg02jVXV1LscEz+iLDxLh3tgjRuySLDWfZ3GI9hqOvk8nFzYc/cgSPL+2P",
-	"O/7CtsrT9xUAAP//",
+	"O/7CtsrT9zUA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

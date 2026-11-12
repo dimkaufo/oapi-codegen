@@ -8,7 +8,6 @@ import (
 	"compress/flate"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,10 +17,11 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/labstack/echo/v4"
+	"github.com/oapi-codegen/runtime"
 )
 
 // Test defines model for Test.
-type Test = map[string]interface{}
+type Test = map[string]any
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -123,7 +123,7 @@ func NewTestRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/test")
+	operationPath := "/test"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -273,21 +273,21 @@ func ParseTestResponse(rsp *http.Response) (*TestResponse, error) {
 	switch {
 	case rsp.Header.Get("Content-Type") == "application/json" && rsp.StatusCode == 200:
 		var dest Test
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case rsp.Header.Get("Content-Type") == "application/json; profile=\"Bar\"" && rsp.StatusCode == 200:
 		var dest Test
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationjsonProfileBar200 = &dest
 
 	case rsp.Header.Get("Content-Type") == "application/json; profile=\"Foo\"" && rsp.StatusCode == 200:
 		var dest Test
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationjsonProfileFoo200 = &dest
@@ -381,7 +381,7 @@ type Test200JSONResponse Test
 func (response Test200JSONResponse) VisitTestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -395,7 +395,7 @@ type Test200ApplicationJSONProfileBarResponse Test
 func (response Test200ApplicationJSONProfileBarResponse) VisitTestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json; profile=\"Bar\"")
@@ -409,7 +409,7 @@ type Test200ApplicationJSONProfileFooResponse Test
 func (response Test200ApplicationJSONProfileFooResponse) VisitTestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json; profile=\"Foo\"")
@@ -425,8 +425,11 @@ type StrictServerInterface interface {
 	Test(ctx context.Context, request TestRequestObject) (TestResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx echo.Context, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx echo.Context, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares}
@@ -441,7 +444,7 @@ type strictHandler struct {
 func (sh *strictHandler) Test(ctx echo.Context) error {
 	var request TestRequestObject
 
-	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx echo.Context, request any) (any, error) {
 		return sh.ssi.Test(ctx.Request().Context(), request.(TestRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -467,8 +470,7 @@ func (sh *strictHandler) Test(ctx echo.Context) error {
 var swaggerSpec = []string{
 	"rM8xSwQxEAXgvyJPy3BZtYvYWAj2ltfEOOvlyM0MyVjIsv9dEhcWLMVp3jTvY2ZBkosKE1tDWNDSiS5x",
 	"rK/UrKd9KSFA3s6UDOu6OmSeBYE/S3EQJY6aEXB/mA63cNBopyF424gPGiFKNVoWfnlH+PEdKjUVbjQa",
-	"d9PUIwkb8ehE1ZLTaPlzE96P7NtNpRkB137/wm8v+OH3a38TD1daZc6FHo94ivWIfzafRf5gbvMdAAD/",
-	"/w==",
+	"d9PUIwkb8ehE1ZLTaPlzE96P7NtNpRkB137/wm8v+OH3a38TD1daZc6FHo94ivWIfzafRf5gbvM9AA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

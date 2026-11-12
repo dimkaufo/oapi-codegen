@@ -3,8 +3,11 @@ package codegen
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"reflect"
 	"regexp"
+	"sort"
+	"strings"
 )
 
 // defaultStreamingContentTypes are the regex patterns matched against
@@ -33,6 +36,13 @@ type Configuration struct {
 	OutputOptions OutputOptions `yaml:"output-options,omitempty"`
 	// ImportMapping specifies the golang package path for each external reference
 	ImportMapping map[string]string `yaml:"import-mapping,omitempty"`
+	// AllowRemoteRefsFrom lists the remote documents that external $refs in
+	// the input specification may be fetched from while it is loaded. Each
+	// entry is the URL of a referenced document exactly as it appears in the
+	// $ref, without the fragment, or "*" to allow every URL. When empty, which
+	// is the default, remote references are refused and only references to
+	// local files are followed.
+	AllowRemoteRefsFrom []string `yaml:"allow-remote-refs-from,omitempty"`
 	// AdditionalImports defines any additional Go imports to add to the generated code
 	AdditionalImports []AdditionalImport `yaml:"additional-imports,omitempty"`
 	// NoVCSVersionOverride allows overriding the version of the application for cases where no Version Control System (VCS) is available when building, for instance when using a Nix derivation.
@@ -46,6 +56,17 @@ func (o Configuration) Validate() error {
 		return errors.New("package name must be specified")
 	}
 
+	for _, entry := range o.AllowRemoteRefsFrom {
+		entry = strings.TrimSpace(entry)
+		if entry == "*" {
+			continue
+		}
+		u, err := url.Parse(entry)
+		if err != nil || u.Scheme == "" || u.Host == "" || u.Fragment != "" || u.RawFragment != "" {
+			return fmt.Errorf("allow-remote-refs-from entries are the URL of a referenced document without its fragment, or \"*\": got %q", entry)
+		}
+	}
+
 	// Only one server type should be specified at a time.
 	nServers := 0
 	if o.Generate.IrisServer {
@@ -55,6 +76,9 @@ func (o Configuration) Validate() error {
 		nServers++
 	}
 	if o.Generate.FiberServer {
+		nServers++
+	}
+	if o.Generate.FiberV3Server {
 		nServers++
 	}
 	if o.Generate.EchoServer {
@@ -95,6 +119,16 @@ func (o Configuration) Validate() error {
 		}
 	}
 
+	// import-mapping keys are the paths of $ref'd documents (a relative
+	// file path or URL). A JSON pointer key can never match anything —
+	// references within the same document always resolve to the package
+	// being generated — so it is a configuration mistake, not a mapping.
+	for _, specPath := range SortedMapKeys(o.ImportMapping) {
+		if strings.HasPrefix(specPath, "#") {
+			errs = append(errs, fmt.Errorf("`import-mapping` key %q is a JSON pointer, but keys must be the path or URL of a $ref'd document; references within the same document cannot be remapped to another package — see https://github.com/oapi-codegen/oapi-codegen/tree/main/examples/import-mapping", specPath))
+		}
+	}
+
 	err := errors.Join(errs...)
 	if err != nil {
 		return fmt.Errorf("failed to validate configuration: %w", err)
@@ -128,6 +162,10 @@ func (o Configuration) Warnings() map[string]string {
 		warnings["generate-types-for-anonymous-schemas"] = "the flag is set with `generate.models: false` and a client/server generator. The hoisted named types this config emits references to will not be declared by this config. If a sibling config emits `generate.models: true` into the same Go package with the same flag setting, you can ignore this warning. Otherwise, set `generate.models: true` in this config or remove the flag to fall back to anonymous structs."
 	}
 
+	if o.Compatibility.OldMergeSchemas {
+		warnings["old-merge-schemas"] = fmt.Sprintf("is deprecated; set `compatibility.schema-merging-behavior: %s` instead, which it is an alias for.", SchemaMergingV1)
+	}
+
 	return warnings
 }
 
@@ -151,6 +189,8 @@ type GenerateOptions struct {
 	ChiServer bool `yaml:"chi-server,omitempty"`
 	// FiberServer specifies whether to generate fiber server boilerplate
 	FiberServer bool `yaml:"fiber-server,omitempty"`
+	// FiberV3Server specifies whether to generate fiber v3 server boilerplate
+	FiberV3Server bool `yaml:"fiber-v3-server,omitempty"`
 	// EchoServer specifies whether to generate echo server boilerplate
 	EchoServer bool `yaml:"echo-server,omitempty"`
 	// Echo5Server specifies whether to generate echo v5 server boilerplate
@@ -189,10 +229,13 @@ func (g GenerateOptions) RouterImports() []AdditionalImport {
 		imports = append(imports, AdditionalImport{Package: "github.com/go-chi/chi/v5"})
 	case g.GinServer:
 		imports = append(imports, AdditionalImport{Package: "github.com/gin-gonic/gin"})
+		imports = append(imports, AdditionalImport{Package: "github.com/gin-gonic/gin/binding"})
 	case g.GorillaServer:
 		imports = append(imports, AdditionalImport{Package: "github.com/gorilla/mux"})
 	case g.FiberServer:
 		imports = append(imports, AdditionalImport{Package: "github.com/gofiber/fiber/v2"})
+	case g.FiberV3Server:
+		imports = append(imports, AdditionalImport{Package: "github.com/gofiber/fiber/v3"})
 	case g.IrisServer:
 		imports = append(imports, AdditionalImport{Package: "github.com/kataras/iris/v12"})
 		imports = append(imports, AdditionalImport{Package: "github.com/kataras/iris/v12/core/router"})
@@ -208,7 +251,7 @@ func (g GenerateOptions) RouterImports() []AdditionalImport {
 // references would be emitted without a corresponding declaration.
 func (g GenerateOptions) AnyOperationGenerator() bool {
 	return g.Client || g.IrisServer || g.EchoServer || g.Echo5Server ||
-		g.ChiServer || g.FiberServer || g.GinServer || g.GorillaServer ||
+		g.ChiServer || g.FiberServer || g.FiberV3Server || g.GinServer || g.GorillaServer ||
 		g.StdHTTPServer || g.Strict
 }
 
@@ -254,7 +297,32 @@ type CompatibilityOptions struct {
 	// level. So, new behavior merges OpenAPI specs but generates different code
 	// than we have in the past. Set OldMergeSchemas to true for the old behavior.
 	// Please see https://github.com/oapi-codegen/oapi-codegen/issues/531
+	//
+	// Deprecated: set SchemaMergingBehavior to "v1" instead, which this is an
+	// alias for.
 	OldMergeSchemas bool `yaml:"old-merge-schemas,omitempty"`
+	// SchemaMergingBehavior selects how schemas composed with allOf are merged
+	// into Go types, and how anyOf and oneOf are turned into Go unions. Each
+	// value is a version of that behavior:
+	//
+	//   - "v1": allOf members that are $refs are embedded in the Go struct, and
+	//     the fields of inline members are inlined. This was the only behavior
+	//     before v1.11.0; OldMergeSchemas: true is an alias for it. For anyOf and
+	//     oneOf it does what v2 does.
+	//   - "v2": allOf members are merged keyword by keyword into one Go type,
+	//     and anyOf and oneOf become a union type with As*, From* and Merge*
+	//     methods. The default since v1.11.0.
+	//   - "v3": allOf members are merged by what allOf means, a value that
+	//     matches every member, and members no value can match are an error.
+	//     Unions model more of the spec: an allOf of several unions keeps each,
+	//     a oneOf or anyOf that only adds constraints makes no union, and the
+	//     As* of a variant with additionalProperties: false rejects keys no
+	//     part of the object declares. Added in v2.9.0 as an option; it becomes
+	//     the default after at least one release as an option.
+	//
+	// Leaving it unset means "v2". The versions are compared in
+	// https://github.com/oapi-codegen/oapi-codegen/blob/main/docs/schema-merging.md
+	SchemaMergingBehavior string `yaml:"schema-merging-behavior,omitempty"`
 	// In the past, when a schema combined `allOf` with sibling fields at the
 	// same level (`properties`, `required`, `additionalProperties`,
 	// `description`), those siblings were silently discarded and the schema
@@ -353,7 +421,16 @@ type CompatibilityOptions struct {
 	// types (e.g. `bearerAuthContextKey`), the scope constants (e.g.
 	// `BearerAuthScopes`), and the per-operation calls that store the
 	// operation's scopes into the request context.
-	// This mechanism is deprecated and off by default: it flattens the
+	//
+	// A security scheme that is a $ref into a spec covered by import-mapping
+	// does not declare its own context key type; its scopes constant is an
+	// alias of the one in the mapped package, so `context.Value` lookups use
+	// the same key across the generated packages. This requires the mapped
+	// spec's config to also set this flag, so that the referenced constant
+	// exists. Please see
+	// https://github.com/oapi-codegen/oapi-codegen/issues/2383
+	//
+	// Deprecated: this mechanism is off by default because it flattens the
 	// OpenAPI `security` requirements into a per-scheme list of scopes, and
 	// cannot represent alternative schemes (OR), combined schemes (AND), or
 	// anonymous (`{}`) alternatives. Authentication and authorization should
@@ -361,9 +438,77 @@ type CompatibilityOptions struct {
 	// middleware, which evaluates the spec's security requirements directly.
 	// Please see https://github.com/oapi-codegen/oapi-codegen/issues/1524
 	EnableAuthScopesOnContext bool `yaml:"enable-auth-scopes-on-context,omitempty"`
+
+	// SortHandlerRegistrations restores the historical behavior of registering
+	// generated route handlers in sorted (lexicographic, by path then method)
+	// order. By default handlers are registered in the order their paths are
+	// declared in the spec, so that on routers which match in registration
+	// order (e.g. Fiber, Gorilla/mux) overlapping paths can be disambiguated by
+	// ordering them in the spec. Set this to true to opt out and go back to the
+	// old sorted registration order.
+	// Please see https://github.com/oapi-codegen/oapi-codegen/issues/1887
+	SortHandlerRegistrations bool `yaml:"sort-handler-registrations,omitempty"`
+
+	// OverlaysUseYamlJsonpath reads the targets of `output-options.overlay`
+	// actions in the JSONPath dialect used by oapi-codegen before v2.9.0
+	// (yaml-jsonpath), by translating them to RFC 9535. The setting applies
+	// to the whole overlay: by default every target is read as RFC 9535
+	// JSONPath, including targets that are valid in both dialects but mean
+	// something else in each, such as `$.paths.*.*[?(!@.servers)]`; there
+	// is no per-target detection. The translation covers the differences
+	// found in practice, but is not an exact emulation; its known
+	// limitations are documented in the internal/overlay/legacyjsonpath
+	// package.
+	// Please see https://github.com/oapi-codegen/oapi-codegen/issues/2502
+	OverlaysUseYamlJsonpath bool `yaml:"overlays-use-yaml-jsonpath,omitempty"`
+}
+
+// The values of CompatibilityOptions.SchemaMergingBehavior.
+const (
+	SchemaMergingV1 = "v1"
+	SchemaMergingV2 = "v2"
+	SchemaMergingV3 = "v3"
+)
+
+// schemaMergingVersion returns the schema-merging-behavior these options
+// select: the configured version, v1 for the deprecated OldMergeSchemas, and
+// v2 when neither is set. Both Validate and Generate reject the options when
+// it returns an error.
+func (co CompatibilityOptions) schemaMergingVersion() (string, error) {
+	switch co.SchemaMergingBehavior {
+	case "":
+		if co.OldMergeSchemas {
+			return SchemaMergingV1, nil
+		}
+		return SchemaMergingV2, nil
+	case SchemaMergingV1:
+		return SchemaMergingV1, nil
+	case SchemaMergingV2:
+		if co.OldMergeSchemas {
+			return "", fmt.Errorf("`old-merge-schemas: true` is an alias for `schema-merging-behavior: %s`, which conflicts with `schema-merging-behavior: %s`",
+				SchemaMergingV1, co.SchemaMergingBehavior)
+		}
+		return SchemaMergingV2, nil
+	case SchemaMergingV3:
+		if co.OldMergeSchemas {
+			return "", fmt.Errorf("`old-merge-schemas: true` is an alias for `schema-merging-behavior: %s`, which conflicts with `schema-merging-behavior: %s`",
+				SchemaMergingV1, co.SchemaMergingBehavior)
+		}
+		if co.OldAllOfSiblingMerging {
+			return "", fmt.Errorf("`old-allof-sibling-merging` applies only to `schema-merging-behavior` %s and %s",
+				SchemaMergingV1, SchemaMergingV2)
+		}
+		return SchemaMergingV3, nil
+	default:
+		return "", fmt.Errorf("unknown `schema-merging-behavior` %q; valid values are %q, %q and %q",
+			co.SchemaMergingBehavior, SchemaMergingV1, SchemaMergingV2, SchemaMergingV3)
+	}
 }
 
 func (co CompatibilityOptions) Validate() map[string]string {
+	if _, err := co.schemaMergingVersion(); err != nil {
+		return map[string]string{"schema-merging-behavior": err.Error()}
+	}
 	return nil
 }
 
@@ -385,6 +530,14 @@ type OutputOptions struct {
 	// named constants. Set this to true to fall through to the standard union
 	// generator instead.
 	SkipEnumViaOneOf bool `yaml:"skip-enum-via-oneof,omitempty"`
+	// LenientUnionAccessors makes a union's As* methods ignore the properties
+	// a variant with `additionalProperties: false` doesn't declare, as they
+	// do for any other variant. By default, with schema-merging-behavior v3,
+	// such a variant's As* returns an error for a property that neither the
+	// variant nor anything else in the union's object declares, so that data
+	// of another variant isn't taken for it. The older values ignore this
+	// option: their As* always ignore such properties.
+	LenientUnionAccessors bool `yaml:"lenient-union-accessors,omitempty"`
 	// Only include operations that have one of these tags. Ignored when empty.
 	IncludeTags []string `yaml:"include-tags,omitempty"`
 	// Exclude operations that have one of these tags. Ignored when empty.
@@ -436,8 +589,18 @@ type OutputOptions struct {
 	// Overlay defines configuration for the OpenAPI Overlay (https://github.com/OAI/Overlay-Specification) to manipulate the OpenAPI specification before generation. This allows modifying the specification without needing to apply changes directly to it, making it easier to keep it up-to-date.
 	Overlay OutputOptionsOverlay `yaml:"overlay"`
 
-	// EnableYamlTags adds YAML tags to generated structs, in addition to default JSON ones
+	// EnableYamlTags adds YAML tags to generated structs, in addition to default JSON ones.
+	// Superseded by StructTags: when a `yaml` entry is present in `struct-tags`, this flag
+	// has no effect.
 	EnableYamlTags bool `yaml:"yaml-tags,omitempty"`
+
+	// StructTags configures which struct tags are generated on struct fields and how their
+	// values are rendered. Each entry is a tag name plus a Go text/template evaluated
+	// against the field (see StructTagInfo for the available variables). Entries are
+	// merged by name on top of the defaults, so a `json` entry replaces the default json
+	// template while new names add tags. Tags render in alphabetical order; a template
+	// that renders to the empty string suppresses that tag on that field.
+	StructTags StructTagsConfig `yaml:"struct-tags,omitempty"`
 
 	// ClientResponseBytesFunction decides whether to enable the generation of a `Bytes()` method on response objects for `ClientWithResponses`
 	ClientResponseBytesFunction bool `yaml:"client-response-bytes-function,omitempty"`
@@ -497,6 +660,41 @@ type OutputOptions struct {
 	// TypeMapping allows customizing OpenAPI type/format to Go type mappings.
 	// User-specified mappings are merged on top of the defaults.
 	TypeMapping *TypeMapping `yaml:"type-mapping,omitempty"`
+
+	// ContentTypes maps a short name to a list of regex patterns matched
+	// against request/response media types. When a media type matches a
+	// pattern, the short name is used as the tag in generated type names
+	// (e.g. mapping `V1: ['^application/vnd\.mycompany\.v1\+json$']` produces
+	// `FindPetsV1RequestBody` instead of the default name derived from the
+	// media type), and models are generated for that media type even when it
+	// isn't one of the built-in supported types. Wire-level handling
+	// (marshaling, binding) is still derived from the media type itself, so
+	// renaming e.g. `application/x-www-form-urlencoded` keeps form encoding.
+	//
+	// Typed fields on client response structs are only generated for media
+	// types the client knows how to deserialize (JSON-like, YAML and XML).
+	// Mapping any other media type (e.g. `CSV: ['^text/csv$']`) generates
+	// models and named request bodies, but client responses for it expose
+	// only the raw body.
+	//
+	// User entries are merged on top of the built-in defaults by key
+	// replacement (pattern lists are not merged):
+	//
+	//   JSON:      ['^application/json$']
+	//   Formdata:  ['^application/x-www-form-urlencoded$']
+	//   Multipart: ['^multipart/']
+	//   Text:      ['^text/plain$']
+	//
+	// An empty pattern list disables a key, so renaming a built-in means
+	// adding the new key and emptying the old one, e.g.
+	// `Form: ['^application/x-www-form-urlencoded$']` plus `Formdata: []` —
+	// otherwise the media type matches under both short names, which is a
+	// generation-time error. Media types that match no pattern keep the
+	// remaining built-in behavior (vendored `+json` types get a name derived
+	// from the media type; anything else is passed through untyped).
+	// NOTE that mapping two media types that appear on the same request or
+	// response to the same short name produces colliding type names.
+	ContentTypes map[string][]string `yaml:"content-types,omitempty"`
 }
 
 func (oo OutputOptions) Validate() map[string]string {
@@ -509,6 +707,18 @@ func (oo OutputOptions) Validate() map[string]string {
 	if _, err := compileStreamingContentTypes(oo.StreamingContentTypes); err != nil {
 		return map[string]string{
 			"streaming-content-types": err.Error(),
+		}
+	}
+
+	if _, err := compileContentTypeNameTags(oo.ContentTypes); err != nil {
+		return map[string]string{
+			"content-types": err.Error(),
+		}
+	}
+
+	if _, err := newStructTagGenerator(defaultStructTagsConfig(oo.EnableYamlTags).Merge(oo.StructTags)); err != nil {
+		return map[string]string{
+			"struct-tags": err.Error(),
 		}
 	}
 
@@ -533,7 +743,120 @@ func compileStreamingContentTypes(user []string) ([]*regexp.Regexp, error) {
 	return out, nil
 }
 
+// contentTypeTagPattern constrains the short names usable as keys in
+// output-options.content-types: they're spliced into Go type names, so they
+// must be valid exported-identifier fragments.
+var contentTypeTagPattern = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9]*$`)
+
+// defaultContentTypes is the built-in short name to media-type-pattern
+// mapping. User entries in output-options.content-types are merged on top by
+// key replacement: a user key with the same name replaces the whole default
+// entry (patterns are not merged), and an empty pattern list disables a key.
+//
+// Vendored JSON media types (e.g. application/vnd.api+json) aren't listed
+// here because their default tag is derived from the media type itself;
+// they're handled as a fallback after this mapping. Likewise YAML/XML/HAL
+// tags only apply to client response deserialization and stay out of this
+// mapping so they don't cause request-body models to be generated by default.
+func defaultContentTypes() map[string][]string {
+	return map[string][]string{
+		"JSON":      {`^application/json$`},
+		"Formdata":  {`^application/x-www-form-urlencoded$`},
+		"Multipart": {`^multipart/`},
+		"Text":      {`^text/plain$`},
+	}
+}
+
+// contentTypeNameTags resolves media types to the short name (tag) used in
+// generated type names, from the defaults merged with
+// output-options.content-types.
+type contentTypeNameTags struct {
+	tags     []string
+	patterns [][]*regexp.Regexp
+}
+
+// compileContentTypeNameTags validates and compiles the defaults merged with
+// the user's output-options.content-types mapping (user keys replace default
+// keys wholesale). Tags are stored sorted so matching (and ambiguity
+// reporting) is deterministic.
+func compileContentTypeNameTags(user map[string][]string) (*contentTypeNameTags, error) {
+	mapping := defaultContentTypes()
+	for tag, patterns := range user {
+		mapping[tag] = patterns
+	}
+
+	m := &contentTypeNameTags{}
+	tags := make([]string, 0, len(mapping))
+	for tag := range mapping {
+		tags = append(tags, tag)
+	}
+	sort.Strings(tags)
+	for _, tag := range tags {
+		if !contentTypeTagPattern.MatchString(tag) {
+			return nil, fmt.Errorf("content-types short name %q is not usable in Go type names: it must match %s", tag, contentTypeTagPattern)
+		}
+		regexes := make([]*regexp.Regexp, 0, len(mapping[tag]))
+		for _, pattern := range mapping[tag] {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				return nil, fmt.Errorf("invalid content-types pattern %q under %q: %w", pattern, tag, err)
+			}
+			regexes = append(regexes, re)
+		}
+		m.tags = append(m.tags, tag)
+		m.patterns = append(m.patterns, regexes)
+	}
+	return m, nil
+}
+
+// defaultContentTypeNameTags is the compiled default mapping, used when
+// Generate() hasn't populated globalState (e.g. helpers exercised directly
+// in tests).
+var defaultContentTypeNameTags = func() *contentTypeNameTags {
+	m, err := compileContentTypeNameTags(nil)
+	if err != nil {
+		panic(fmt.Sprintf("compiling default content-types: %v", err))
+	}
+	return m
+}()
+
+// activeContentTypeNameTags returns the matcher for the current generation
+// run, falling back to the compiled defaults.
+func activeContentTypeNameTags() *contentTypeNameTags {
+	if globalState.contentTypeNameTags != nil {
+		return globalState.contentTypeNameTags
+	}
+	return defaultContentTypeNameTags
+}
+
+// TagFor returns the short name whose patterns match the given media type,
+// or "" when no pattern matches (callers fall back to media-type-derived
+// naming, or to untyped handling). Matching patterns under more than one
+// short name is an error.
+func (m *contentTypeNameTags) TagFor(contentType string) (string, error) {
+	var matched []string
+	for i, regexes := range m.patterns {
+		for _, re := range regexes {
+			if re.MatchString(contentType) {
+				matched = append(matched, m.tags[i])
+				break
+			}
+		}
+	}
+	switch len(matched) {
+	case 0:
+		return "", nil
+	case 1:
+		return matched[0], nil
+	default:
+		return "", fmt.Errorf("content type %q matches content-types patterns under multiple short names: %s", contentType, strings.Join(matched, ", "))
+	}
+}
+
 type OutputOptionsOverlay struct {
+	// Path is the path to the Overlay file. Action targets are RFC 9535
+	// JSONPath expressions; set CompatibilityOptions.OverlaysUseYamlJsonpath
+	// to read all of them in the dialect of earlier versions instead.
 	Path string `yaml:"path"`
 
 	// Strict defines whether the Overlay should be applied in a strict way, highlighting any actions that will not take any effect. This can, however, lead to more work when testing new actions in an Overlay, so can be turned off with this setting.

@@ -5,12 +5,12 @@ package customclienttype
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // Client defines model for Client.
@@ -118,7 +118,7 @@ func NewGetClientRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/client")
+	operationPath := "/client"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -254,7 +254,7 @@ func ParseGetClientResponse(rsp *http.Response) (*GetClientResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Client
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest

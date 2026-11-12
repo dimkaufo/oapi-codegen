@@ -16,6 +16,10 @@ import (
 	externalRef0 "github.com/oapi-codegen/oapi-codegen/v2/internal/test/references/multipackage/packageB"
 )
 
+const (
+	BearerAuthScopes bearerAuthContextKey = "BearerAuth.Scopes"
+)
+
 // EnrichedUser defines model for EnrichedUser.
 type EnrichedUser struct {
 	ExtraField *string              `json:"extra_field,omitempty"`
@@ -36,17 +40,20 @@ type StatusPostPayload struct {
 	Status externalRef0.StatusEnum `json:"status"`
 }
 
+// bearerAuthContextKey is the context key for BearerAuth security scheme
+type bearerAuthContextKey string
+
 // Base64 encoded, compressed with deflate, json marshaled OpenAPI spec.
 // Stored as a slice of fixed-width chunks rather than one concatenated
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"nFPNbsIwDH4Xb8dIiGtuQ+IM2jQuCFUmcSFbmmRJOg1VefcpoQgqOqnsZtf21++n7UDYxllDJgbgHQRx",
-	"pAZLuTReiSPJ90A+96j1qga+7eDZUw0cnmbX21l/OHMoPvFAiyo4ElW5TawD560jHxUVaPqJHqtakZa5",
-	"jSdHwCFEr8wBUmKXJ3b/QSJC2iUGq1K/5P0hmMGGRlBYf13t83A65fN7FpAyj7eIsQ1rG+IaT9qi/K8R",
-	"Z6DNfMQMTxismezDONuprqQ7hFeryyKZtgG+BZSNMsCgzdHt2L2tY8KW5fgGRET1TcBAmb6cirSZDy0e",
-	"qgpl57FAbxhm9Z6+WuVJZpo93G6C0Ze/YMhHydEvz1vdzyM1D9IteVyjR+/xlPucx1+hDlUpCTfr9+Ly",
-	"vjK1BW5arRlYRwadAg6QVcdjOE/SbwAAAP//",
+	"nFRNb9wgEP0v0x6RVrlyy0o5J2rUXKKVxeJxTIuBDuOqlsV/r8DeD3ddyZvbAPOe37yHGUH7LniHjiPI",
+	"EaJusVOlfHJkdIv194iU18ra5wbk+whfCRuQ8GV3we5m4C4o/VN94L6KAXVVsEmMEMgHJDZYqPEPk6oa",
+	"g7bOSx4CgoTIZNwHpCROO/74AzVDOiQBz6V+BPkvmVMdrrCIGV0dQd4jefrOHlLW8cqK+/jiI7+owXpV",
+	"f9aIiejtYcUMQhW92+zDutqtrqQbhm/elkZ0fQfyHVTdGQcC+hzdQdzaujbYUwFfkWg2vxEEGDeXW5ne",
+	"HpYWL6eKpee+QK8U5ukJf/WGsM4yZ7rDBqNPf8FSj6lXbx55O58zdnfKLXlcoldEaoA05fG/UJdTmRqu",
+	"2m+HSwIi6p4MD69ZwiR1j4qQHntuz+9ABh3LNpxJWuYwXSPjGg/S9dYK8AGdCgYkQDaO2zidpL8DAA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

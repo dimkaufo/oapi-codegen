@@ -6,12 +6,12 @@ package clients
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // SchemaObject defines model for SchemaObject.
@@ -20,8 +20,8 @@ type SchemaObject struct {
 	Role      string `json:"role"`
 }
 
-// PostVendorJsonApplicationVndAPIPlusJSONBody defines parameters for PostVendorJson.
-type PostVendorJsonApplicationVndAPIPlusJSONBody = map[string]interface{}
+// PostVendorJsonApplicationVndAPIPlusJSONBody defines body for PostVendorJson for application/vnd.api+json ContentType.
+type PostVendorJsonApplicationVndAPIPlusJSONBody = map[string]any
 
 // PostBothJSONRequestBody defines body for PostBoth for application/json ContentType.
 type PostBothJSONRequestBody = SchemaObject
@@ -300,7 +300,7 @@ func (c *Client) PostVendorJsonWithApplicationVndAPIPlusJSONBody(ctx context.Con
 // NewPostBothRequest calls the generic PostBoth builder with application/json body
 func NewPostBothRequest(server string, body PostBothJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +317,7 @@ func NewPostBothRequestWithBody(server string, contentType string, body io.Reade
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/with_both_bodies")
+	operationPath := "/with_both_bodies"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -346,7 +346,7 @@ func NewGetBothRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/with_both_responses")
+	operationPath := "/with_both_responses"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -367,7 +367,7 @@ func NewGetBothRequest(server string) (*http.Request, error) {
 // NewPostJsonRequest calls the generic PostJson builder with application/json body
 func NewPostJsonRequest(server string, body PostJsonJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +384,7 @@ func NewPostJsonRequestWithBody(server string, contentType string, body io.Reade
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/with_json_body")
+	operationPath := "/with_json_body"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -413,7 +413,7 @@ func NewGetJsonRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/with_json_response")
+	operationPath := "/with_json_response"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -440,7 +440,7 @@ func NewPostOtherRequestWithBody(server string, contentType string, body io.Read
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/with_other_body")
+	operationPath := "/with_other_body"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -469,7 +469,7 @@ func NewGetOtherRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/with_other_response")
+	operationPath := "/with_other_response"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -496,7 +496,7 @@ func NewGetJsonWithTrailingSlashRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/with_trailing_slash/")
+	operationPath := "/with_trailing_slash/"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -517,7 +517,7 @@ func NewGetJsonWithTrailingSlashRequest(server string) (*http.Request, error) {
 // NewPostVendorJsonRequestWithApplicationVndAPIPlusJSONBody calls the generic PostVendorJson builder with application/vnd.api+json body
 func NewPostVendorJsonRequestWithApplicationVndAPIPlusJSONBody(server string, body PostVendorJsonApplicationVndAPIPlusJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -534,7 +534,7 @@ func NewPostVendorJsonRequestWithBody(server string, contentType string, body io
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/with_vendor_json")
+	operationPath := "/with_vendor_json"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}

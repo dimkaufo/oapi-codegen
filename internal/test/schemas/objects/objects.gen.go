@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/oapi-codegen/runtime"
 )
 
 // AdditionalPropertiesObject1 Has additional properties of type int
@@ -32,21 +33,21 @@ type AdditionalPropertiesObject2 struct {
 
 // AdditionalPropertiesObject3 Allows any additional property
 type AdditionalPropertiesObject3 struct {
-	Name                 string                 `json:"name"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Name                 string         `json:"name"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // AdditionalPropertiesObject4 Has anonymous field which has additional properties
 type AdditionalPropertiesObject4 struct {
 	Inner                AdditionalPropertiesObject4_Inner `json:"inner"`
 	Name                 string                            `json:"name"`
-	AdditionalProperties map[string]interface{}            `json:"-"`
+	AdditionalProperties map[string]any                    `json:"-"`
 }
 
 // AdditionalPropertiesObject4_Inner defines model for AdditionalPropertiesObject4.Inner.
 type AdditionalPropertiesObject4_Inner struct {
-	Name                 string                 `json:"name"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Name                 string         `json:"name"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // AdditionalPropertiesObject5 Has additional properties with schema for dictionaries
@@ -87,11 +88,11 @@ type SchemaObjectNullable struct {
 	WriteOnlyRequiredProp *int    `json:"writeOnlyRequiredProp,omitempty"`
 }
 
-// Test200JSONResponseBody_Item defines parameters for Test.
+// Test200JSONResponseBody_Item defines model for Test200JSONResponseBody.Item.
 type Test200JSONResponseBody_Item struct {
-	Field1               *string                `json:"field1,omitempty"`
-	Field2               *string                `json:"field2,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Field1               *string        `json:"field1,omitempty"`
+	Field2               *string        `json:"field2,omitempty"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // Getter for additional properties for AdditionalPropertiesObject1. Returns the specified
@@ -114,13 +115,13 @@ func (a *AdditionalPropertiesObject1) Set(fieldName string, value int) {
 // Override default JSON handling for AdditionalPropertiesObject1 to handle AdditionalProperties
 func (a *AdditionalPropertiesObject1) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["id"]; found {
-		err = json.Unmarshal(raw, &a.Id)
+		err = runtime.JSONUnmarshal(raw, &a.Id)
 		if err != nil {
 			return fmt.Errorf("error reading 'id': %w", err)
 		}
@@ -128,7 +129,7 @@ func (a *AdditionalPropertiesObject1) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &a.Name)
+		err = runtime.JSONUnmarshal(raw, &a.Name)
 		if err != nil {
 			return fmt.Errorf("error reading 'name': %w", err)
 		}
@@ -136,7 +137,7 @@ func (a *AdditionalPropertiesObject1) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["optional"]; found {
-		err = json.Unmarshal(raw, &a.Optional)
+		err = runtime.JSONUnmarshal(raw, &a.Optional)
 		if err != nil {
 			return fmt.Errorf("error reading 'optional': %w", err)
 		}
@@ -147,7 +148,7 @@ func (a *AdditionalPropertiesObject1) UnmarshalJSON(b []byte) error {
 		a.AdditionalProperties = make(map[string]int)
 		for fieldName, fieldBuf := range object {
 			var fieldVal int
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -162,35 +163,35 @@ func (a AdditionalPropertiesObject1) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
-	object["id"], err = json.Marshal(a.Id)
+	object["id"], err = runtime.JSONMarshal(a.Id)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'id': %w", err)
 	}
 
-	object["name"], err = json.Marshal(a.Name)
+	object["name"], err = runtime.JSONMarshal(a.Name)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'name': %w", err)
 	}
 
 	if a.Optional != nil {
-		object["optional"], err = json.Marshal(a.Optional)
+		object["optional"], err = runtime.JSONMarshal(a.Optional)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'optional': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for AdditionalPropertiesObject3. Returns the specified
 // element and whether it was found
-func (a AdditionalPropertiesObject3) Get(fieldName string) (value interface{}, found bool) {
+func (a AdditionalPropertiesObject3) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -198,9 +199,9 @@ func (a AdditionalPropertiesObject3) Get(fieldName string) (value interface{}, f
 }
 
 // Setter for additional properties for AdditionalPropertiesObject3
-func (a *AdditionalPropertiesObject3) Set(fieldName string, value interface{}) {
+func (a *AdditionalPropertiesObject3) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -208,13 +209,13 @@ func (a *AdditionalPropertiesObject3) Set(fieldName string, value interface{}) {
 // Override default JSON handling for AdditionalPropertiesObject3 to handle AdditionalProperties
 func (a *AdditionalPropertiesObject3) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &a.Name)
+		err = runtime.JSONUnmarshal(raw, &a.Name)
 		if err != nil {
 			return fmt.Errorf("error reading 'name': %w", err)
 		}
@@ -222,10 +223,10 @@ func (a *AdditionalPropertiesObject3) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -240,23 +241,23 @@ func (a AdditionalPropertiesObject3) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
-	object["name"], err = json.Marshal(a.Name)
+	object["name"], err = runtime.JSONMarshal(a.Name)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'name': %w", err)
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for AdditionalPropertiesObject4. Returns the specified
 // element and whether it was found
-func (a AdditionalPropertiesObject4) Get(fieldName string) (value interface{}, found bool) {
+func (a AdditionalPropertiesObject4) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -264,9 +265,9 @@ func (a AdditionalPropertiesObject4) Get(fieldName string) (value interface{}, f
 }
 
 // Setter for additional properties for AdditionalPropertiesObject4
-func (a *AdditionalPropertiesObject4) Set(fieldName string, value interface{}) {
+func (a *AdditionalPropertiesObject4) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -274,13 +275,13 @@ func (a *AdditionalPropertiesObject4) Set(fieldName string, value interface{}) {
 // Override default JSON handling for AdditionalPropertiesObject4 to handle AdditionalProperties
 func (a *AdditionalPropertiesObject4) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["inner"]; found {
-		err = json.Unmarshal(raw, &a.Inner)
+		err = runtime.JSONUnmarshal(raw, &a.Inner)
 		if err != nil {
 			return fmt.Errorf("error reading 'inner': %w", err)
 		}
@@ -288,7 +289,7 @@ func (a *AdditionalPropertiesObject4) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &a.Name)
+		err = runtime.JSONUnmarshal(raw, &a.Name)
 		if err != nil {
 			return fmt.Errorf("error reading 'name': %w", err)
 		}
@@ -296,10 +297,10 @@ func (a *AdditionalPropertiesObject4) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -314,28 +315,28 @@ func (a AdditionalPropertiesObject4) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
-	object["inner"], err = json.Marshal(a.Inner)
+	object["inner"], err = runtime.JSONMarshal(a.Inner)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'inner': %w", err)
 	}
 
-	object["name"], err = json.Marshal(a.Name)
+	object["name"], err = runtime.JSONMarshal(a.Name)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'name': %w", err)
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for AdditionalPropertiesObject4_Inner. Returns the specified
 // element and whether it was found
-func (a AdditionalPropertiesObject4_Inner) Get(fieldName string) (value interface{}, found bool) {
+func (a AdditionalPropertiesObject4_Inner) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -343,9 +344,9 @@ func (a AdditionalPropertiesObject4_Inner) Get(fieldName string) (value interfac
 }
 
 // Setter for additional properties for AdditionalPropertiesObject4_Inner
-func (a *AdditionalPropertiesObject4_Inner) Set(fieldName string, value interface{}) {
+func (a *AdditionalPropertiesObject4_Inner) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -353,13 +354,13 @@ func (a *AdditionalPropertiesObject4_Inner) Set(fieldName string, value interfac
 // Override default JSON handling for AdditionalPropertiesObject4_Inner to handle AdditionalProperties
 func (a *AdditionalPropertiesObject4_Inner) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &a.Name)
+		err = runtime.JSONUnmarshal(raw, &a.Name)
 		if err != nil {
 			return fmt.Errorf("error reading 'name': %w", err)
 		}
@@ -367,10 +368,10 @@ func (a *AdditionalPropertiesObject4_Inner) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -385,23 +386,23 @@ func (a AdditionalPropertiesObject4_Inner) MarshalJSON() ([]byte, error) {
 	var err error
 	object := make(map[string]json.RawMessage)
 
-	object["name"], err = json.Marshal(a.Name)
+	object["name"], err = runtime.JSONMarshal(a.Name)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'name': %w", err)
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for Test200JSONResponseBody_Item. Returns the specified
 // element and whether it was found
-func (a Test200JSONResponseBody_Item) Get(fieldName string) (value interface{}, found bool) {
+func (a Test200JSONResponseBody_Item) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -409,9 +410,9 @@ func (a Test200JSONResponseBody_Item) Get(fieldName string) (value interface{}, 
 }
 
 // Setter for additional properties for Test200JSONResponseBody_Item
-func (a *Test200JSONResponseBody_Item) Set(fieldName string, value interface{}) {
+func (a *Test200JSONResponseBody_Item) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -419,13 +420,13 @@ func (a *Test200JSONResponseBody_Item) Set(fieldName string, value interface{}) 
 // Override default JSON handling for Test200JSONResponseBody_Item to handle AdditionalProperties
 func (a *Test200JSONResponseBody_Item) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -433,7 +434,7 @@ func (a *Test200JSONResponseBody_Item) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -441,10 +442,10 @@ func (a *Test200JSONResponseBody_Item) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -460,26 +461,26 @@ func (a Test200JSONResponseBody_Item) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
@@ -582,7 +583,7 @@ func NewTestRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/test")
+	operationPath := "/test"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -718,7 +719,7 @@ func ParseTestResponse(rsp *http.Response) (*TestResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []Test200JSONResponseBody_Item
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -736,7 +737,6 @@ type ServerInterface interface {
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
-
 type Unimplemented struct{}
 
 // (GET /test)
@@ -874,6 +874,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
+
 	wrapper := ServerInterfaceWrapper{
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,
@@ -899,7 +900,7 @@ type Test200JSONResponse []Test200JSONResponseBody_Item
 func (response Test200JSONResponse) VisitTestResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -915,8 +916,11 @@ type StrictServerInterface interface {
 	Test(ctx context.Context, request TestRequestObject) (TestResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -935,6 +939,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -948,7 +962,7 @@ type strictHandler struct {
 func (sh *strictHandler) Test(w http.ResponseWriter, r *http.Request) {
 	var request TestRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.Test(ctx, request.(TestRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

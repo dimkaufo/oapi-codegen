@@ -129,6 +129,10 @@ func (s StrictServer) ReusableResponses(ctx context.Context, request ReusableRes
 	return ReusableResponses200JSONResponse{ReusableresponseJSONResponse: ReusableresponseJSONResponse{Body: *request.Body}}, nil
 }
 
+func (s StrictServer) ReusableURLEncodedResponse(ctx context.Context, request ReusableURLEncodedResponseRequestObject) (ReusableURLEncodedResponseResponseObject, error) {
+	return ReusableURLEncodedResponse200FormdataResponse{ReusableurlencodedresponseFormdataResponse: ReusableurlencodedresponseFormdataResponse(*request.Body)}, nil
+}
+
 func (s StrictServer) RequiredJSONBody(ctx context.Context, request RequiredJSONBodyRequestObject) (RequiredJSONBodyResponseObject, error) {
 	return RequiredJSONBody200JSONResponse(*request.Body), nil
 }
@@ -152,4 +156,11 @@ func (s StrictServer) UnionExample(ctx context.Context, request UnionExampleRequ
 			union: union,
 		},
 	}, nil
+}
+
+func (s StrictServer) SameNameParamAndBodyProperty(ctx context.Context, request SameNameParamAndBodyPropertyRequestObject) (SameNameParamAndBodyPropertyResponseObject, error) {
+	if request.Body == nil {
+		return SameNameParamAndBodyProperty200JSONResponse{}, nil
+	}
+	return SameNameParamAndBodyProperty200JSONResponse(*request.Body), nil
 }

@@ -6,6 +6,8 @@ package aggregatesallof
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // DefaultAdditional1 defines model for DefaultAdditional1.
@@ -30,11 +32,11 @@ type MergeDefaultDefault struct {
 
 // MergeDefaultWithAny defines model for MergeDefaultWithAny.
 type MergeDefaultWithAny struct {
-	Field1               *int                   `json:"field1,omitempty"`
-	Field2               *string                `json:"field2,omitempty"`
-	FieldA               *int                   `json:"fieldA,omitempty"`
-	FieldB               *string                `json:"fieldB,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Field1               *int           `json:"field1,omitempty"`
+	Field2               *string        `json:"field2,omitempty"`
+	FieldA               *int           `json:"fieldA,omitempty"`
+	FieldB               *string        `json:"fieldB,omitempty"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // MergeDefaultWithString defines model for MergeDefaultWithString.
@@ -56,20 +58,20 @@ type MergeDefaultWithout struct {
 
 // MergeWithAnyDefault defines model for MergeWithAnyDefault.
 type MergeWithAnyDefault struct {
-	Field1               *int                   `json:"field1,omitempty"`
-	Field2               *string                `json:"field2,omitempty"`
-	FieldA               *int                   `json:"fieldA,omitempty"`
-	FieldB               *string                `json:"fieldB,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Field1               *int           `json:"field1,omitempty"`
+	Field2               *string        `json:"field2,omitempty"`
+	FieldA               *int           `json:"fieldA,omitempty"`
+	FieldB               *string        `json:"fieldB,omitempty"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // MergeWithAnyWithAny defines model for MergeWithAnyWithAny.
 type MergeWithAnyWithAny struct {
-	Field1               *int                   `json:"field1,omitempty"`
-	Field2               *string                `json:"field2,omitempty"`
-	FieldA               *int                   `json:"fieldA,omitempty"`
-	FieldB               *string                `json:"fieldB,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Field1               *int           `json:"field1,omitempty"`
+	Field2               *string        `json:"field2,omitempty"`
+	FieldA               *int           `json:"fieldA,omitempty"`
+	FieldB               *string        `json:"fieldB,omitempty"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // MergeWithAnyWithString defines model for MergeWithAnyWithString.
@@ -147,26 +149,42 @@ type MergeWithoutWithout struct {
 	FieldB *string `json:"fieldB,omitempty"`
 }
 
+// NestedOneOfInAllOf defines model for NestedOneOfInAllOf.
+type NestedOneOfInAllOf struct {
+	AFoo  *string `json:"a_foo,omitempty"`
+	union json.RawMessage
+}
+
+// NestedOneOfInAllOf0 defines model for NestedOneOfInAllOf.0.
+type NestedOneOfInAllOf0 struct {
+	AFooOneOf0 *string `json:"a_foo_one_of_0,omitempty"`
+}
+
+// NestedOneOfInAllOf1 defines model for NestedOneOfInAllOf.1.
+type NestedOneOfInAllOf1 struct {
+	AFooOneOf1 *string `json:"a_foo_one_of_1,omitempty"`
+}
+
 // PersonAllOfAdditional defines model for PersonAllOfAdditional.
 type PersonAllOfAdditional struct {
-	Age                  *float32               `json:"age,omitempty"`
-	Metadata             string                 `json:"metadata"`
-	Name                 *string                `json:"name,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Age                  *float32       `json:"age,omitempty"`
+	Metadata             string         `json:"metadata"`
+	Name                 *string        `json:"name,omitempty"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // WithAnyAdditional1 defines model for WithAnyAdditional1.
 type WithAnyAdditional1 struct {
-	Field1               *int                   `json:"field1,omitempty"`
-	Field2               *string                `json:"field2,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	Field1               *int           `json:"field1,omitempty"`
+	Field2               *string        `json:"field2,omitempty"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // WithAnyAdditional2 defines model for WithAnyAdditional2.
 type WithAnyAdditional2 struct {
-	FieldA               *int                   `json:"fieldA,omitempty"`
-	FieldB               *string                `json:"fieldB,omitempty"`
-	AdditionalProperties map[string]interface{} `json:"-"`
+	FieldA               *int           `json:"fieldA,omitempty"`
+	FieldB               *string        `json:"fieldB,omitempty"`
+	AdditionalProperties map[string]any `json:"-"`
 }
 
 // WithStringAdditional1 defines model for WithStringAdditional1.
@@ -197,7 +215,7 @@ type WithoutAdditional2 struct {
 
 // Getter for additional properties for MergeDefaultWithAny. Returns the specified
 // element and whether it was found
-func (a MergeDefaultWithAny) Get(fieldName string) (value interface{}, found bool) {
+func (a MergeDefaultWithAny) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -205,9 +223,9 @@ func (a MergeDefaultWithAny) Get(fieldName string) (value interface{}, found boo
 }
 
 // Setter for additional properties for MergeDefaultWithAny
-func (a *MergeDefaultWithAny) Set(fieldName string, value interface{}) {
+func (a *MergeDefaultWithAny) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -215,13 +233,13 @@ func (a *MergeDefaultWithAny) Set(fieldName string, value interface{}) {
 // Override default JSON handling for MergeDefaultWithAny to handle AdditionalProperties
 func (a *MergeDefaultWithAny) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -229,7 +247,7 @@ func (a *MergeDefaultWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -237,7 +255,7 @@ func (a *MergeDefaultWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -245,7 +263,7 @@ func (a *MergeDefaultWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -253,10 +271,10 @@ func (a *MergeDefaultWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -272,40 +290,40 @@ func (a MergeDefaultWithAny) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for MergeDefaultWithString. Returns the specified
@@ -328,13 +346,13 @@ func (a *MergeDefaultWithString) Set(fieldName string, value string) {
 // Override default JSON handling for MergeDefaultWithString to handle AdditionalProperties
 func (a *MergeDefaultWithString) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -342,7 +360,7 @@ func (a *MergeDefaultWithString) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -350,7 +368,7 @@ func (a *MergeDefaultWithString) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -358,7 +376,7 @@ func (a *MergeDefaultWithString) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -369,7 +387,7 @@ func (a *MergeDefaultWithString) UnmarshalJSON(b []byte) error {
 		a.AdditionalProperties = make(map[string]string)
 		for fieldName, fieldBuf := range object {
 			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -385,45 +403,45 @@ func (a MergeDefaultWithString) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for MergeWithAnyDefault. Returns the specified
 // element and whether it was found
-func (a MergeWithAnyDefault) Get(fieldName string) (value interface{}, found bool) {
+func (a MergeWithAnyDefault) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -431,9 +449,9 @@ func (a MergeWithAnyDefault) Get(fieldName string) (value interface{}, found boo
 }
 
 // Setter for additional properties for MergeWithAnyDefault
-func (a *MergeWithAnyDefault) Set(fieldName string, value interface{}) {
+func (a *MergeWithAnyDefault) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -441,13 +459,13 @@ func (a *MergeWithAnyDefault) Set(fieldName string, value interface{}) {
 // Override default JSON handling for MergeWithAnyDefault to handle AdditionalProperties
 func (a *MergeWithAnyDefault) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -455,7 +473,7 @@ func (a *MergeWithAnyDefault) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -463,7 +481,7 @@ func (a *MergeWithAnyDefault) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -471,7 +489,7 @@ func (a *MergeWithAnyDefault) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -479,10 +497,10 @@ func (a *MergeWithAnyDefault) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -498,45 +516,45 @@ func (a MergeWithAnyDefault) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for MergeWithAnyWithAny. Returns the specified
 // element and whether it was found
-func (a MergeWithAnyWithAny) Get(fieldName string) (value interface{}, found bool) {
+func (a MergeWithAnyWithAny) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -544,9 +562,9 @@ func (a MergeWithAnyWithAny) Get(fieldName string) (value interface{}, found boo
 }
 
 // Setter for additional properties for MergeWithAnyWithAny
-func (a *MergeWithAnyWithAny) Set(fieldName string, value interface{}) {
+func (a *MergeWithAnyWithAny) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -554,13 +572,13 @@ func (a *MergeWithAnyWithAny) Set(fieldName string, value interface{}) {
 // Override default JSON handling for MergeWithAnyWithAny to handle AdditionalProperties
 func (a *MergeWithAnyWithAny) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -568,7 +586,7 @@ func (a *MergeWithAnyWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -576,7 +594,7 @@ func (a *MergeWithAnyWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -584,7 +602,7 @@ func (a *MergeWithAnyWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -592,10 +610,10 @@ func (a *MergeWithAnyWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -611,40 +629,40 @@ func (a MergeWithAnyWithAny) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for MergeWithAnyWithString. Returns the specified
@@ -667,13 +685,13 @@ func (a *MergeWithAnyWithString) Set(fieldName string, value string) {
 // Override default JSON handling for MergeWithAnyWithString to handle AdditionalProperties
 func (a *MergeWithAnyWithString) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -681,7 +699,7 @@ func (a *MergeWithAnyWithString) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -689,7 +707,7 @@ func (a *MergeWithAnyWithString) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -697,7 +715,7 @@ func (a *MergeWithAnyWithString) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -708,7 +726,7 @@ func (a *MergeWithAnyWithString) UnmarshalJSON(b []byte) error {
 		a.AdditionalProperties = make(map[string]string)
 		for fieldName, fieldBuf := range object {
 			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -724,40 +742,40 @@ func (a MergeWithAnyWithString) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for MergeWithStringDefault. Returns the specified
@@ -780,13 +798,13 @@ func (a *MergeWithStringDefault) Set(fieldName string, value string) {
 // Override default JSON handling for MergeWithStringDefault to handle AdditionalProperties
 func (a *MergeWithStringDefault) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -794,7 +812,7 @@ func (a *MergeWithStringDefault) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -802,7 +820,7 @@ func (a *MergeWithStringDefault) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -810,7 +828,7 @@ func (a *MergeWithStringDefault) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -821,7 +839,7 @@ func (a *MergeWithStringDefault) UnmarshalJSON(b []byte) error {
 		a.AdditionalProperties = make(map[string]string)
 		for fieldName, fieldBuf := range object {
 			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -837,40 +855,40 @@ func (a MergeWithStringDefault) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for MergeWithStringWithAny. Returns the specified
@@ -893,13 +911,13 @@ func (a *MergeWithStringWithAny) Set(fieldName string, value string) {
 // Override default JSON handling for MergeWithStringWithAny to handle AdditionalProperties
 func (a *MergeWithStringWithAny) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -907,7 +925,7 @@ func (a *MergeWithStringWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -915,7 +933,7 @@ func (a *MergeWithStringWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -923,7 +941,7 @@ func (a *MergeWithStringWithAny) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -934,7 +952,7 @@ func (a *MergeWithStringWithAny) UnmarshalJSON(b []byte) error {
 		a.AdditionalProperties = make(map[string]string)
 		for fieldName, fieldBuf := range object {
 			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -950,45 +968,45 @@ func (a MergeWithStringWithAny) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for PersonAllOfAdditional. Returns the specified
 // element and whether it was found
-func (a PersonAllOfAdditional) Get(fieldName string) (value interface{}, found bool) {
+func (a PersonAllOfAdditional) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -996,9 +1014,9 @@ func (a PersonAllOfAdditional) Get(fieldName string) (value interface{}, found b
 }
 
 // Setter for additional properties for PersonAllOfAdditional
-func (a *PersonAllOfAdditional) Set(fieldName string, value interface{}) {
+func (a *PersonAllOfAdditional) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -1006,13 +1024,13 @@ func (a *PersonAllOfAdditional) Set(fieldName string, value interface{}) {
 // Override default JSON handling for PersonAllOfAdditional to handle AdditionalProperties
 func (a *PersonAllOfAdditional) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["age"]; found {
-		err = json.Unmarshal(raw, &a.Age)
+		err = runtime.JSONUnmarshal(raw, &a.Age)
 		if err != nil {
 			return fmt.Errorf("error reading 'age': %w", err)
 		}
@@ -1020,7 +1038,7 @@ func (a *PersonAllOfAdditional) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["metadata"]; found {
-		err = json.Unmarshal(raw, &a.Metadata)
+		err = runtime.JSONUnmarshal(raw, &a.Metadata)
 		if err != nil {
 			return fmt.Errorf("error reading 'metadata': %w", err)
 		}
@@ -1028,7 +1046,7 @@ func (a *PersonAllOfAdditional) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["name"]; found {
-		err = json.Unmarshal(raw, &a.Name)
+		err = runtime.JSONUnmarshal(raw, &a.Name)
 		if err != nil {
 			return fmt.Errorf("error reading 'name': %w", err)
 		}
@@ -1036,10 +1054,10 @@ func (a *PersonAllOfAdditional) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -1055,36 +1073,36 @@ func (a PersonAllOfAdditional) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Age != nil {
-		object["age"], err = json.Marshal(a.Age)
+		object["age"], err = runtime.JSONMarshal(a.Age)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'age': %w", err)
 		}
 	}
 
-	object["metadata"], err = json.Marshal(a.Metadata)
+	object["metadata"], err = runtime.JSONMarshal(a.Metadata)
 	if err != nil {
 		return nil, fmt.Errorf("error marshaling 'metadata': %w", err)
 	}
 
 	if a.Name != nil {
-		object["name"], err = json.Marshal(a.Name)
+		object["name"], err = runtime.JSONMarshal(a.Name)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'name': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for WithAnyAdditional1. Returns the specified
 // element and whether it was found
-func (a WithAnyAdditional1) Get(fieldName string) (value interface{}, found bool) {
+func (a WithAnyAdditional1) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -1092,9 +1110,9 @@ func (a WithAnyAdditional1) Get(fieldName string) (value interface{}, found bool
 }
 
 // Setter for additional properties for WithAnyAdditional1
-func (a *WithAnyAdditional1) Set(fieldName string, value interface{}) {
+func (a *WithAnyAdditional1) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -1102,13 +1120,13 @@ func (a *WithAnyAdditional1) Set(fieldName string, value interface{}) {
 // Override default JSON handling for WithAnyAdditional1 to handle AdditionalProperties
 func (a *WithAnyAdditional1) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -1116,7 +1134,7 @@ func (a *WithAnyAdditional1) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -1124,10 +1142,10 @@ func (a *WithAnyAdditional1) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -1143,31 +1161,31 @@ func (a WithAnyAdditional1) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for WithAnyAdditional2. Returns the specified
 // element and whether it was found
-func (a WithAnyAdditional2) Get(fieldName string) (value interface{}, found bool) {
+func (a WithAnyAdditional2) Get(fieldName string) (value any, found bool) {
 	if a.AdditionalProperties != nil {
 		value, found = a.AdditionalProperties[fieldName]
 	}
@@ -1175,9 +1193,9 @@ func (a WithAnyAdditional2) Get(fieldName string) (value interface{}, found bool
 }
 
 // Setter for additional properties for WithAnyAdditional2
-func (a *WithAnyAdditional2) Set(fieldName string, value interface{}) {
+func (a *WithAnyAdditional2) Set(fieldName string, value any) {
 	if a.AdditionalProperties == nil {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 	}
 	a.AdditionalProperties[fieldName] = value
 }
@@ -1185,13 +1203,13 @@ func (a *WithAnyAdditional2) Set(fieldName string, value interface{}) {
 // Override default JSON handling for WithAnyAdditional2 to handle AdditionalProperties
 func (a *WithAnyAdditional2) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -1199,7 +1217,7 @@ func (a *WithAnyAdditional2) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -1207,10 +1225,10 @@ func (a *WithAnyAdditional2) UnmarshalJSON(b []byte) error {
 	}
 
 	if len(object) != 0 {
-		a.AdditionalProperties = make(map[string]interface{})
+		a.AdditionalProperties = make(map[string]any)
 		for fieldName, fieldBuf := range object {
-			var fieldVal interface{}
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			var fieldVal any
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -1226,26 +1244,26 @@ func (a WithAnyAdditional2) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for WithStringAdditional1. Returns the specified
@@ -1268,13 +1286,13 @@ func (a *WithStringAdditional1) Set(fieldName string, value string) {
 // Override default JSON handling for WithStringAdditional1 to handle AdditionalProperties
 func (a *WithStringAdditional1) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["field1"]; found {
-		err = json.Unmarshal(raw, &a.Field1)
+		err = runtime.JSONUnmarshal(raw, &a.Field1)
 		if err != nil {
 			return fmt.Errorf("error reading 'field1': %w", err)
 		}
@@ -1282,7 +1300,7 @@ func (a *WithStringAdditional1) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["field2"]; found {
-		err = json.Unmarshal(raw, &a.Field2)
+		err = runtime.JSONUnmarshal(raw, &a.Field2)
 		if err != nil {
 			return fmt.Errorf("error reading 'field2': %w", err)
 		}
@@ -1293,7 +1311,7 @@ func (a *WithStringAdditional1) UnmarshalJSON(b []byte) error {
 		a.AdditionalProperties = make(map[string]string)
 		for fieldName, fieldBuf := range object {
 			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -1309,26 +1327,26 @@ func (a WithStringAdditional1) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.Field1 != nil {
-		object["field1"], err = json.Marshal(a.Field1)
+		object["field1"], err = runtime.JSONMarshal(a.Field1)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field1': %w", err)
 		}
 	}
 
 	if a.Field2 != nil {
-		object["field2"], err = json.Marshal(a.Field2)
+		object["field2"], err = runtime.JSONMarshal(a.Field2)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'field2': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
 }
 
 // Getter for additional properties for WithStringAdditional2. Returns the specified
@@ -1351,13 +1369,13 @@ func (a *WithStringAdditional2) Set(fieldName string, value string) {
 // Override default JSON handling for WithStringAdditional2 to handle AdditionalProperties
 func (a *WithStringAdditional2) UnmarshalJSON(b []byte) error {
 	object := make(map[string]json.RawMessage)
-	err := json.Unmarshal(b, &object)
+	err := runtime.JSONUnmarshal(b, &object)
 	if err != nil {
 		return err
 	}
 
 	if raw, found := object["fieldA"]; found {
-		err = json.Unmarshal(raw, &a.FieldA)
+		err = runtime.JSONUnmarshal(raw, &a.FieldA)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldA': %w", err)
 		}
@@ -1365,7 +1383,7 @@ func (a *WithStringAdditional2) UnmarshalJSON(b []byte) error {
 	}
 
 	if raw, found := object["fieldB"]; found {
-		err = json.Unmarshal(raw, &a.FieldB)
+		err = runtime.JSONUnmarshal(raw, &a.FieldB)
 		if err != nil {
 			return fmt.Errorf("error reading 'fieldB': %w", err)
 		}
@@ -1376,7 +1394,7 @@ func (a *WithStringAdditional2) UnmarshalJSON(b []byte) error {
 		a.AdditionalProperties = make(map[string]string)
 		for fieldName, fieldBuf := range object {
 			var fieldVal string
-			err := json.Unmarshal(fieldBuf, &fieldVal)
+			err := runtime.JSONUnmarshal(fieldBuf, &fieldVal)
 			if err != nil {
 				return fmt.Errorf("error unmarshaling field %s: %w", fieldName, err)
 			}
@@ -1392,24 +1410,120 @@ func (a WithStringAdditional2) MarshalJSON() ([]byte, error) {
 	object := make(map[string]json.RawMessage)
 
 	if a.FieldA != nil {
-		object["fieldA"], err = json.Marshal(a.FieldA)
+		object["fieldA"], err = runtime.JSONMarshal(a.FieldA)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldA': %w", err)
 		}
 	}
 
 	if a.FieldB != nil {
-		object["fieldB"], err = json.Marshal(a.FieldB)
+		object["fieldB"], err = runtime.JSONMarshal(a.FieldB)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling 'fieldB': %w", err)
 		}
 	}
 
 	for fieldName, field := range a.AdditionalProperties {
-		object[fieldName], err = json.Marshal(field)
+		object[fieldName], err = runtime.JSONMarshal(field)
 		if err != nil {
 			return nil, fmt.Errorf("error marshaling '%s': %w", fieldName, err)
 		}
 	}
-	return json.Marshal(object)
+	return runtime.JSONMarshal(object)
+}
+
+// AsNestedOneOfInAllOf0 returns the union data inside the NestedOneOfInAllOf as a NestedOneOfInAllOf0
+func (t NestedOneOfInAllOf) AsNestedOneOfInAllOf0() (NestedOneOfInAllOf0, error) {
+	var body NestedOneOfInAllOf0
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromNestedOneOfInAllOf0 overwrites any union data inside the NestedOneOfInAllOf as the provided NestedOneOfInAllOf0
+func (t *NestedOneOfInAllOf) FromNestedOneOfInAllOf0(v NestedOneOfInAllOf0) error {
+	b, err := runtime.JSONMarshal(v)
+	t.union = b
+	return err
+}
+
+// MergeNestedOneOfInAllOf0 performs a merge with any union data inside the NestedOneOfInAllOf, using the provided NestedOneOfInAllOf0
+func (t *NestedOneOfInAllOf) MergeNestedOneOfInAllOf0(v NestedOneOfInAllOf0) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+// AsNestedOneOfInAllOf1 returns the union data inside the NestedOneOfInAllOf as a NestedOneOfInAllOf1
+func (t NestedOneOfInAllOf) AsNestedOneOfInAllOf1() (NestedOneOfInAllOf1, error) {
+	var body NestedOneOfInAllOf1
+	err := runtime.JSONUnmarshal(t.union, &body)
+	return body, err
+}
+
+// FromNestedOneOfInAllOf1 overwrites any union data inside the NestedOneOfInAllOf as the provided NestedOneOfInAllOf1
+func (t *NestedOneOfInAllOf) FromNestedOneOfInAllOf1(v NestedOneOfInAllOf1) error {
+	b, err := runtime.JSONMarshal(v)
+	t.union = b
+	return err
+}
+
+// MergeNestedOneOfInAllOf1 performs a merge with any union data inside the NestedOneOfInAllOf, using the provided NestedOneOfInAllOf1
+func (t *NestedOneOfInAllOf) MergeNestedOneOfInAllOf1(v NestedOneOfInAllOf1) error {
+	b, err := runtime.JSONMarshal(v)
+	if err != nil {
+		return err
+	}
+
+	merged, err := runtime.JSONMerge(t.union, b)
+	t.union = merged
+	return err
+}
+
+func (t NestedOneOfInAllOf) MarshalJSON() ([]byte, error) {
+	b, err := t.union.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	object := make(map[string]json.RawMessage)
+	if t.union != nil {
+		err = runtime.JSONUnmarshal(b, &object)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if t.AFoo != nil {
+		object["a_foo"], err = runtime.JSONMarshal(t.AFoo)
+		if err != nil {
+			return nil, fmt.Errorf("error marshaling 'a_foo': %w", err)
+		}
+	}
+	b, err = runtime.JSONMarshal(object)
+	return b, err
+}
+
+func (t *NestedOneOfInAllOf) UnmarshalJSON(b []byte) error {
+	err := t.union.UnmarshalJSON(b)
+	if err != nil {
+		return err
+	}
+	object := make(map[string]json.RawMessage)
+	err = runtime.JSONUnmarshal(b, &object)
+	if err != nil {
+		return err
+	}
+
+	if raw, found := object["a_foo"]; found {
+		err = runtime.JSONUnmarshal(raw, &t.AFoo)
+		if err != nil {
+			return fmt.Errorf("error reading 'a_foo': %w", err)
+		}
+	}
+
+	return err
 }

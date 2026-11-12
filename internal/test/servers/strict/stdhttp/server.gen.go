@@ -10,7 +10,6 @@ import (
 	"compress/flate"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -54,6 +53,12 @@ type ServerInterface interface {
 
 	// (POST /reusable-responses)
 	ReusableResponses(w http.ResponseWriter, r *http.Request)
+
+	// (POST /reusable-urlencoded-response)
+	ReusableURLEncodedResponse(w http.ResponseWriter, r *http.Request)
+
+	// (POST /same-name-param-and-body-property/{name})
+	SameNameParamAndBodyProperty(w http.ResponseWriter, r *http.Request, name string)
 
 	// (POST /text)
 	TextExample(w http.ResponseWriter, r *http.Request)
@@ -190,7 +195,7 @@ func (siw *ServerInterfaceWrapper) ReservedGoKeywordParameters(w http.ResponseWr
 	// ------------- Path parameter "type" -------------
 	var pType string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "type", r.PathValue("type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "type", r.PathValue("type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
 		return
@@ -212,6 +217,46 @@ func (siw *ServerInterfaceWrapper) ReusableResponses(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReusableResponses(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReusableURLEncodedResponse operation middleware
+func (siw *ServerInterfaceWrapper) ReusableURLEncodedResponse(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReusableURLEncodedResponse(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SameNameParamAndBodyProperty operation middleware
+func (siw *ServerInterfaceWrapper) SameNameParamAndBodyProperty(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", r.PathValue("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "name", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SameNameParamAndBodyProperty(w, r, name)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -476,19 +521,21 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 	}
 
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/json", wrapper.JSONExample)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/urlencoded", wrapper.URLEncodedExample)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/multipart", wrapper.MultipartExample)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/multipart-related", wrapper.MultipartRelatedExample)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/text", wrapper.TextExample)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/unknown", wrapper.UnknownExample)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/multiple", wrapper.MultipleRequestAndResponseTypes)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/with-headers", wrapper.HeadersExample)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/no-content-headers", wrapper.NoContentHeaders)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/reusable-responses", wrapper.ReusableResponses)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/reusable-urlencoded-response", wrapper.ReusableURLEncodedResponse)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/unspecified-content-type", wrapper.UnspecifiedContentType)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/required-json-body", wrapper.RequiredJSONBody)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/required-text-body", wrapper.RequiredTextBody)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/reserved-go-keyword-parameters/{type}", wrapper.ReservedGoKeywordParameters)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/reusable-responses", wrapper.ReusableResponses)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/text", wrapper.TextExample)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/unknown", wrapper.UnknownExample)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/unspecified-content-type", wrapper.UnspecifiedContentType)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/urlencoded", wrapper.URLEncodedExample)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/with-headers", wrapper.HeadersExample)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/same-name-param-and-body-property/{name}", wrapper.SameNameParamAndBodyProperty)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/with-union", wrapper.UnionExample)
 
 	return m
@@ -507,6 +554,8 @@ type ReusableresponseJSONResponse struct {
 	Headers ReusableresponseResponseHeaders
 }
 
+type ReusableurlencodedresponseFormdataResponse Example
+
 type JSONExampleRequestObject struct {
 	Body *JSONExampleJSONRequestBody
 }
@@ -520,7 +569,7 @@ type JSONExample200JSONResponse Example
 func (response JSONExample200JSONResponse) VisitJSONExampleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -634,7 +683,7 @@ type MultipleRequestAndResponseTypes200JSONResponse Example
 func (response MultipleRequestAndResponseTypes200JSONResponse) VisitMultipleRequestAndResponseTypesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -696,7 +745,7 @@ func (response MultipleRequestAndResponseTypes200TextResponse) VisitMultipleRequ
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(200)
 
-	_, err := w.Write([]byte(response))
+	_, err := w.Write([]byte(fmt.Sprint(response)))
 	return err
 }
 
@@ -725,10 +774,22 @@ type NoContentHeaders204Response struct {
 
 func (response NoContentHeaders204Response) VisitNoContentHeadersResponse(w http.ResponseWriter) error {
 	if response.Headers.NullableHeader != nil {
-		w.Header().Set("nullable-header", fmt.Sprint(*response.Headers.NullableHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "nullable-header", *response.Headers.NullableHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header nullable-header: %w", err)
+			}
+			w.Header().Set("nullable-header", v)
+		}
 	}
 	if response.Headers.OptionalHeader != nil {
-		w.Header().Set("optional-header", fmt.Sprint(*response.Headers.OptionalHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "optional-header", *response.Headers.OptionalHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header optional-header: %w", err)
+			}
+			w.Header().Set("optional-header", v)
+		}
 	}
 	w.WriteHeader(204)
 	return nil
@@ -747,7 +808,7 @@ type RequiredJSONBody200JSONResponse Example
 func (response RequiredJSONBody200JSONResponse) VisitRequiredJSONBodyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -787,7 +848,7 @@ func (response RequiredTextBody200TextResponse) VisitRequiredTextBodyResponse(w 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(200)
 
-	_, err := w.Write([]byte(response))
+	_, err := w.Write([]byte(fmt.Sprint(response)))
 	return err
 }
 
@@ -822,7 +883,7 @@ func (response ReservedGoKeywordParameters200TextResponse) VisitReservedGoKeywor
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(200)
 
-	_, err := w.Write([]byte(response))
+	_, err := w.Write([]byte(fmt.Sprint(response)))
 	return err
 }
 
@@ -839,12 +900,24 @@ type ReusableResponses200JSONResponse struct{ ReusableresponseJSONResponse }
 func (response ReusableResponses200JSONResponse) VisitReusableResponsesResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("header1", fmt.Sprint(response.Headers.Header1))
-	w.Header().Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		w.Header().Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		w.Header().Set("header2", v)
+	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
 	return err
@@ -866,6 +939,69 @@ func (response ReusableResponsesdefaultResponse) VisitReusableResponsesResponse(
 	return nil
 }
 
+type ReusableURLEncodedResponseRequestObject struct {
+	Body *ReusableURLEncodedResponseFormdataRequestBody
+}
+
+type ReusableURLEncodedResponseResponseObject interface {
+	VisitReusableURLEncodedResponseResponse(w http.ResponseWriter) error
+}
+
+type ReusableURLEncodedResponse200FormdataResponse struct {
+	ReusableurlencodedresponseFormdataResponse
+}
+
+func (response ReusableURLEncodedResponse200FormdataResponse) VisitReusableURLEncodedResponseResponse(w http.ResponseWriter) error {
+
+	form, err := runtime.MarshalForm(response.ReusableurlencodedresponseFormdataResponse, nil)
+	if err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/x-www-form-urlencoded")
+	w.WriteHeader(200)
+	_, err = w.Write([]byte(form.Encode()))
+	return err
+}
+
+type ReusableURLEncodedResponse400Response = BadrequestResponse
+
+func (response ReusableURLEncodedResponse400Response) VisitReusableURLEncodedResponseResponse(w http.ResponseWriter) error {
+	w.WriteHeader(400)
+	return nil
+}
+
+type ReusableURLEncodedResponsedefaultResponse struct {
+	StatusCode int
+}
+
+func (response ReusableURLEncodedResponsedefaultResponse) VisitReusableURLEncodedResponseResponse(w http.ResponseWriter) error {
+	w.WriteHeader(response.StatusCode)
+	return nil
+}
+
+type SameNameParamAndBodyPropertyRequestObject struct {
+	Name string `json:"name"`
+	Body *SameNameParamAndBodyPropertyJSONRequestBody
+}
+
+type SameNameParamAndBodyPropertyResponseObject interface {
+	VisitSameNameParamAndBodyPropertyResponse(w http.ResponseWriter) error
+}
+
+type SameNameParamAndBodyProperty200JSONResponse SameName
+
+func (response SameNameParamAndBodyProperty200JSONResponse) VisitSameNameParamAndBodyPropertyResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type TextExampleRequestObject struct {
 	Body *TextExampleTextRequestBody
 }
@@ -881,7 +1017,7 @@ func (response TextExample200TextResponse) VisitTextExampleResponse(w http.Respo
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(200)
 
-	_, err := w.Write([]byte(response))
+	_, err := w.Write([]byte(fmt.Sprint(response)))
 	return err
 }
 
@@ -1069,17 +1205,41 @@ type HeadersExample200JSONResponse struct {
 func (response HeadersExample200JSONResponse) VisitHeadersExampleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("header1", fmt.Sprint(response.Headers.Header1))
-	w.Header().Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		w.Header().Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		w.Header().Set("header2", v)
+	}
 	if response.Headers.NullableHeader != nil {
-		w.Header().Set("nullable-header", fmt.Sprint(*response.Headers.NullableHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "nullable-header", *response.Headers.NullableHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header nullable-header: %w", err)
+			}
+			w.Header().Set("nullable-header", v)
+		}
 	}
 	if response.Headers.OptionalHeader != nil {
-		w.Header().Set("optional-header", fmt.Sprint(*response.Headers.OptionalHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "optional-header", *response.Headers.OptionalHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header optional-header: %w", err)
+			}
+			w.Header().Set("optional-header", v)
+		}
 	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
@@ -1123,12 +1283,24 @@ type UnionExample200ApplicationAlternativePlusJSONResponse struct {
 func (response UnionExample200ApplicationAlternativePlusJSONResponse) VisitUnionExampleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/alternative+json")
-	w.Header().Set("header1", fmt.Sprint(response.Headers.Header1))
-	w.Header().Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		w.Header().Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		w.Header().Set("header2", v)
+	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
 	return err
@@ -1142,12 +1314,24 @@ type UnionExample200JSONResponse struct {
 func (response UnionExample200JSONResponse) VisitUnionExampleResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body.union); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("header1", fmt.Sprint(response.Headers.Header1))
-	w.Header().Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		w.Header().Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		w.Header().Set("header2", v)
+	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
 	return err
@@ -1199,6 +1383,12 @@ type StrictServerInterface interface {
 	// (POST /reusable-responses)
 	ReusableResponses(ctx context.Context, request ReusableResponsesRequestObject) (ReusableResponsesResponseObject, error)
 
+	// (POST /reusable-urlencoded-response)
+	ReusableURLEncodedResponse(ctx context.Context, request ReusableURLEncodedResponseRequestObject) (ReusableURLEncodedResponseResponseObject, error)
+
+	// (POST /same-name-param-and-body-property/{name})
+	SameNameParamAndBodyProperty(ctx context.Context, request SameNameParamAndBodyPropertyRequestObject) (SameNameParamAndBodyPropertyResponseObject, error)
+
 	// (POST /text)
 	TextExample(ctx context.Context, request TextExampleRequestObject) (TextExampleResponseObject, error)
 
@@ -1218,8 +1408,11 @@ type StrictServerInterface interface {
 	UnionExample(ctx context.Context, request UnionExampleRequestObject) (UnionExampleResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -1238,6 +1431,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -1252,7 +1455,7 @@ func (sh *strictHandler) JSONExample(w http.ResponseWriter, r *http.Request) {
 	var request JSONExampleRequestObject
 
 	var body JSONExampleJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		if !errors.Is(err, io.EOF) {
 			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 			return
@@ -1261,7 +1464,7 @@ func (sh *strictHandler) JSONExample(w http.ResponseWriter, r *http.Request) {
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.JSONExample(ctx, request.(JSONExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1292,7 +1495,7 @@ func (sh *strictHandler) MultipartExample(w http.ResponseWriter, r *http.Request
 		request.Body = reader
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.MultipartExample(ctx, request.(MultipartExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1326,7 +1529,7 @@ func (sh *strictHandler) MultipartRelatedExample(w http.ResponseWriter, r *http.
 		request.Body = multipart.NewReader(r.Body, boundary)
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.MultipartRelatedExample(ctx, request.(MultipartRelatedExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1353,7 +1556,7 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(w http.ResponseWriter, 
 	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/json") {
 
 		var body MultipleRequestAndResponseTypesJSONRequestBody
-		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if err := runtime.BindJSONBody(r, &body); err != nil {
 			if !errors.Is(err, io.EOF) {
 				sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 				return
@@ -1397,7 +1600,7 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(w http.ResponseWriter, 
 		}
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.MultipleRequestAndResponseTypes(ctx, request.(MultipleRequestAndResponseTypesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1421,7 +1624,7 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(w http.ResponseWriter, 
 func (sh *strictHandler) NoContentHeaders(w http.ResponseWriter, r *http.Request) {
 	var request NoContentHeadersRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.NoContentHeaders(ctx, request.(NoContentHeadersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1446,13 +1649,13 @@ func (sh *strictHandler) RequiredJSONBody(w http.ResponseWriter, r *http.Request
 	var request RequiredJSONBodyRequestObject
 
 	var body RequiredJSONBodyJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RequiredJSONBody(ctx, request.(RequiredJSONBodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1484,7 +1687,7 @@ func (sh *strictHandler) RequiredTextBody(w http.ResponseWriter, r *http.Request
 	body := RequiredTextBodyTextRequestBody(data)
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.RequiredTextBody(ctx, request.(RequiredTextBodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1510,7 +1713,7 @@ func (sh *strictHandler) ReservedGoKeywordParameters(w http.ResponseWriter, r *h
 
 	request.Type = pType
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReservedGoKeywordParameters(ctx, request.(ReservedGoKeywordParametersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1535,7 +1738,7 @@ func (sh *strictHandler) ReusableResponses(w http.ResponseWriter, r *http.Reques
 	var request ReusableResponsesRequestObject
 
 	var body ReusableResponsesJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		if !errors.Is(err, io.EOF) {
 			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 			return
@@ -1544,7 +1747,7 @@ func (sh *strictHandler) ReusableResponses(w http.ResponseWriter, r *http.Reques
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.ReusableResponses(ctx, request.(ReusableResponsesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1557,6 +1760,77 @@ func (sh *strictHandler) ReusableResponses(w http.ResponseWriter, r *http.Reques
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(ReusableResponsesResponseObject); ok {
 		if err := validResponse.VisitReusableResponsesResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ReusableURLEncodedResponse operation middleware
+func (sh *strictHandler) ReusableURLEncodedResponse(w http.ResponseWriter, r *http.Request) {
+	var request ReusableURLEncodedResponseRequestObject
+
+	if err := r.ParseForm(); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode formdata: %w", err))
+		return
+	}
+	var body ReusableURLEncodedResponseFormdataRequestBody
+	if err := runtime.BindForm(&body, r.Form, nil, nil); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't bind formdata: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.ReusableURLEncodedResponse(ctx, request.(ReusableURLEncodedResponseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReusableURLEncodedResponse")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ReusableURLEncodedResponseResponseObject); ok {
+		if err := validResponse.VisitReusableURLEncodedResponseResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SameNameParamAndBodyProperty operation middleware
+func (sh *strictHandler) SameNameParamAndBodyProperty(w http.ResponseWriter, r *http.Request, name string) {
+	var request SameNameParamAndBodyPropertyRequestObject
+
+	request.Name = name
+
+	var body SameNameParamAndBodyPropertyJSONRequestBody
+	if err := runtime.BindJSONBody(r, &body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
+		return sh.ssi.SameNameParamAndBodyProperty(ctx, request.(SameNameParamAndBodyPropertyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SameNameParamAndBodyProperty")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SameNameParamAndBodyPropertyResponseObject); ok {
+		if err := validResponse.VisitSameNameParamAndBodyPropertyResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
@@ -1578,7 +1852,7 @@ func (sh *strictHandler) TextExample(w http.ResponseWriter, r *http.Request) {
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.TextExample(ctx, request.(TextExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1604,7 +1878,7 @@ func (sh *strictHandler) UnknownExample(w http.ResponseWriter, r *http.Request) 
 
 	request.Body = r.Body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UnknownExample(ctx, request.(UnknownExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1632,7 +1906,7 @@ func (sh *strictHandler) UnspecifiedContentType(w http.ResponseWriter, r *http.R
 
 	request.Body = r.Body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UnspecifiedContentType(ctx, request.(UnspecifiedContentTypeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1667,7 +1941,7 @@ func (sh *strictHandler) URLEncodedExample(w http.ResponseWriter, r *http.Reques
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.URLEncodedExample(ctx, request.(URLEncodedExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1694,7 +1968,7 @@ func (sh *strictHandler) HeadersExample(w http.ResponseWriter, r *http.Request, 
 	request.Params = params
 
 	var body HeadersExampleJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		if !errors.Is(err, io.EOF) {
 			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 			return
@@ -1703,7 +1977,7 @@ func (sh *strictHandler) HeadersExample(w http.ResponseWriter, r *http.Request, 
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.HeadersExample(ctx, request.(HeadersExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1728,7 +2002,7 @@ func (sh *strictHandler) UnionExample(w http.ResponseWriter, r *http.Request) {
 	var request UnionExampleRequestObject
 
 	var body UnionExampleJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		if !errors.Is(err, io.EOF) {
 			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 			return
@@ -1737,7 +2011,7 @@ func (sh *strictHandler) UnionExample(w http.ResponseWriter, r *http.Request) {
 		request.Body = &body
 	}
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.UnionExample(ctx, request.(UnionExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1762,27 +2036,31 @@ func (sh *strictHandler) UnionExample(w http.ResponseWriter, r *http.Request) {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"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",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

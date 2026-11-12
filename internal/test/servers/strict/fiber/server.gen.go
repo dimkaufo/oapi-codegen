@@ -53,6 +53,12 @@ type ServerInterface interface {
 	// (POST /reusable-responses)
 	ReusableResponses(c *fiber.Ctx) error
 
+	// (POST /reusable-urlencoded-response)
+	ReusableURLEncodedResponse(c *fiber.Ctx) error
+
+	// (POST /same-name-param-and-body-property/{name})
+	SameNameParamAndBodyProperty(c *fiber.Ctx, name string) error
+
 	// (POST /text)
 	TextExample(c *fiber.Ctx) error
 
@@ -254,6 +260,53 @@ func (siw *ServerInterfaceWrapper) ReusableResponses(c *fiber.Ctx) error {
 	return handler(c)
 }
 
+// ReusableURLEncodedResponse operation middleware
+func (siw *ServerInterfaceWrapper) ReusableURLEncodedResponse(c *fiber.Ctx) error {
+
+	handler := func(c *fiber.Ctx) error {
+		return siw.Handler.ReusableURLEncodedResponse(c)
+	}
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		m := siw.HandlerMiddlewares[i]
+		next := handler
+		handler = func(c *fiber.Ctx) error {
+			return m(c, next)
+		}
+	}
+
+	return handler(c)
+}
+
+// SameNameParamAndBodyProperty operation middleware
+func (siw *ServerInterfaceWrapper) SameNameParamAndBodyProperty(c *fiber.Ctx) error {
+
+	var err error
+	_ = err
+
+	// ------------- Path parameter "name" -------------
+	var name string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "name", c.Params("name"), &name, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, fmt.Errorf("Invalid format for parameter name: %w", err).Error())
+	}
+
+	handler := func(c *fiber.Ctx) error {
+		return siw.Handler.SameNameParamAndBodyProperty(c, name)
+	}
+
+	for i := len(siw.HandlerMiddlewares) - 1; i >= 0; i-- {
+		m := siw.HandlerMiddlewares[i]
+		next := handler
+		handler = func(c *fiber.Ctx) error {
+			return m(c, next)
+		}
+	}
+
+	return handler(c)
+}
+
 // TextExample operation middleware
 func (siw *ServerInterfaceWrapper) TextExample(c *fiber.Ctx) error {
 
@@ -353,8 +406,7 @@ func (siw *ServerInterfaceWrapper) HeadersExample(c *fiber.Ctx) error {
 		params.Header1 = Header1
 
 	} else {
-		err = fmt.Errorf("Header parameter header1 is required, but not found: %w", err)
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return fiber.NewError(fiber.StatusBadRequest, "Header parameter header1 is required, but not found")
 	}
 
 	// ------------- Optional header parameter "header2" -------------
@@ -432,13 +484,27 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 
 	router.Post(options.BaseURL+"/json", wrapper.JSONExample)
 
+	router.Post(options.BaseURL+"/urlencoded", wrapper.URLEncodedExample)
+
 	router.Post(options.BaseURL+"/multipart", wrapper.MultipartExample)
 
 	router.Post(options.BaseURL+"/multipart-related", wrapper.MultipartRelatedExample)
 
+	router.Post(options.BaseURL+"/text", wrapper.TextExample)
+
+	router.Post(options.BaseURL+"/unknown", wrapper.UnknownExample)
+
 	router.Post(options.BaseURL+"/multiple", wrapper.MultipleRequestAndResponseTypes)
 
+	router.Post(options.BaseURL+"/with-headers", wrapper.HeadersExample)
+
 	router.Post(options.BaseURL+"/no-content-headers", wrapper.NoContentHeaders)
+
+	router.Post(options.BaseURL+"/reusable-responses", wrapper.ReusableResponses)
+
+	router.Post(options.BaseURL+"/reusable-urlencoded-response", wrapper.ReusableURLEncodedResponse)
+
+	router.Post(options.BaseURL+"/unspecified-content-type", wrapper.UnspecifiedContentType)
 
 	router.Post(options.BaseURL+"/required-json-body", wrapper.RequiredJSONBody)
 
@@ -446,17 +512,7 @@ func RegisterHandlersWithOptions(router fiber.Router, si ServerInterface, option
 
 	router.Get(options.BaseURL+"/reserved-go-keyword-parameters/:type", wrapper.ReservedGoKeywordParameters)
 
-	router.Post(options.BaseURL+"/reusable-responses", wrapper.ReusableResponses)
-
-	router.Post(options.BaseURL+"/text", wrapper.TextExample)
-
-	router.Post(options.BaseURL+"/unknown", wrapper.UnknownExample)
-
-	router.Post(options.BaseURL+"/unspecified-content-type", wrapper.UnspecifiedContentType)
-
-	router.Post(options.BaseURL+"/urlencoded", wrapper.URLEncodedExample)
-
-	router.Post(options.BaseURL+"/with-headers", wrapper.HeadersExample)
+	router.Post(options.BaseURL+"/same-name-param-and-body-property/:name", wrapper.SameNameParamAndBodyProperty)
 
 	router.Post(options.BaseURL+"/with-union", wrapper.UnionExample)
 
@@ -474,6 +530,8 @@ type ReusableresponseJSONResponse struct {
 
 	Headers ReusableresponseResponseHeaders
 }
+
+type ReusableurlencodedresponseFormdataResponse Example
 
 type JSONExampleRequestObject struct {
 	Body *JSONExampleJSONRequestBody
@@ -649,7 +707,7 @@ func (response MultipleRequestAndResponseTypes200TextResponse) VisitMultipleRequ
 	ctx.Response().Header.Set("Content-Type", "text/plain")
 	ctx.Status(200)
 
-	_, err := ctx.WriteString(string(response))
+	_, err := ctx.WriteString(fmt.Sprint(response))
 	return err
 }
 
@@ -678,10 +736,22 @@ type NoContentHeaders204Response struct {
 
 func (response NoContentHeaders204Response) VisitNoContentHeadersResponse(ctx *fiber.Ctx) error {
 	if response.Headers.NullableHeader != nil {
-		ctx.Response().Header.Set("nullable-header", fmt.Sprint(*response.Headers.NullableHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "nullable-header", *response.Headers.NullableHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header nullable-header: %w", err)
+			}
+			ctx.Response().Header.Set("nullable-header", v)
+		}
 	}
 	if response.Headers.OptionalHeader != nil {
-		ctx.Response().Header.Set("optional-header", fmt.Sprint(*response.Headers.OptionalHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "optional-header", *response.Headers.OptionalHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header optional-header: %w", err)
+			}
+			ctx.Response().Header.Set("optional-header", v)
+		}
 	}
 	ctx.Status(204)
 	return nil
@@ -734,7 +804,7 @@ func (response RequiredTextBody200TextResponse) VisitRequiredTextBodyResponse(ct
 	ctx.Response().Header.Set("Content-Type", "text/plain")
 	ctx.Status(200)
 
-	_, err := ctx.WriteString(string(response))
+	_, err := ctx.WriteString(fmt.Sprint(response))
 	return err
 }
 
@@ -768,7 +838,7 @@ func (response ReservedGoKeywordParameters200TextResponse) VisitReservedGoKeywor
 	ctx.Response().Header.Set("Content-Type", "text/plain")
 	ctx.Status(200)
 
-	_, err := ctx.WriteString(string(response))
+	_, err := ctx.WriteString(fmt.Sprint(response))
 	return err
 }
 
@@ -783,8 +853,20 @@ type ReusableResponsesResponseObject interface {
 type ReusableResponses200JSONResponse struct{ ReusableresponseJSONResponse }
 
 func (response ReusableResponses200JSONResponse) VisitReusableResponsesResponse(ctx *fiber.Ctx) error {
-	ctx.Response().Header.Set("header1", fmt.Sprint(response.Headers.Header1))
-	ctx.Response().Header.Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		ctx.Response().Header.Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		ctx.Response().Header.Set("header2", v)
+	}
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
@@ -807,6 +889,64 @@ func (response ReusableResponsesdefaultResponse) VisitReusableResponsesResponse(
 	return nil
 }
 
+type ReusableURLEncodedResponseRequestObject struct {
+	Body *ReusableURLEncodedResponseFormdataRequestBody
+}
+
+type ReusableURLEncodedResponseResponseObject interface {
+	VisitReusableURLEncodedResponseResponse(ctx *fiber.Ctx) error
+}
+
+type ReusableURLEncodedResponse200FormdataResponse struct {
+	ReusableurlencodedresponseFormdataResponse
+}
+
+func (response ReusableURLEncodedResponse200FormdataResponse) VisitReusableURLEncodedResponseResponse(ctx *fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	ctx.Status(200)
+
+	if form, err := runtime.MarshalForm(response.ReusableurlencodedresponseFormdataResponse, nil); err != nil {
+		return err
+	} else {
+		_, err := ctx.WriteString(form.Encode())
+		return err
+	}
+}
+
+type ReusableURLEncodedResponse400Response = BadrequestResponse
+
+func (response ReusableURLEncodedResponse400Response) VisitReusableURLEncodedResponseResponse(ctx *fiber.Ctx) error {
+	ctx.Status(400)
+	return nil
+}
+
+type ReusableURLEncodedResponsedefaultResponse struct {
+	StatusCode int
+}
+
+func (response ReusableURLEncodedResponsedefaultResponse) VisitReusableURLEncodedResponseResponse(ctx *fiber.Ctx) error {
+	ctx.Status(response.StatusCode)
+	return nil
+}
+
+type SameNameParamAndBodyPropertyRequestObject struct {
+	Name string `json:"name"`
+	Body *SameNameParamAndBodyPropertyJSONRequestBody
+}
+
+type SameNameParamAndBodyPropertyResponseObject interface {
+	VisitSameNameParamAndBodyPropertyResponse(ctx *fiber.Ctx) error
+}
+
+type SameNameParamAndBodyProperty200JSONResponse SameName
+
+func (response SameNameParamAndBodyProperty200JSONResponse) VisitSameNameParamAndBodyPropertyResponse(ctx *fiber.Ctx) error {
+	ctx.Response().Header.Set("Content-Type", "application/json")
+	ctx.Status(200)
+
+	return ctx.JSON(&response)
+}
+
 type TextExampleRequestObject struct {
 	Body *TextExampleTextRequestBody
 }
@@ -821,7 +961,7 @@ func (response TextExample200TextResponse) VisitTextExampleResponse(ctx *fiber.C
 	ctx.Response().Header.Set("Content-Type", "text/plain")
 	ctx.Status(200)
 
-	_, err := ctx.WriteString(string(response))
+	_, err := ctx.WriteString(fmt.Sprint(response))
 	return err
 }
 
@@ -1005,13 +1145,37 @@ type HeadersExample200JSONResponse struct {
 }
 
 func (response HeadersExample200JSONResponse) VisitHeadersExampleResponse(ctx *fiber.Ctx) error {
-	ctx.Response().Header.Set("header1", fmt.Sprint(response.Headers.Header1))
-	ctx.Response().Header.Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		ctx.Response().Header.Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		ctx.Response().Header.Set("header2", v)
+	}
 	if response.Headers.NullableHeader != nil {
-		ctx.Response().Header.Set("nullable-header", fmt.Sprint(*response.Headers.NullableHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "nullable-header", *response.Headers.NullableHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header nullable-header: %w", err)
+			}
+			ctx.Response().Header.Set("nullable-header", v)
+		}
 	}
 	if response.Headers.OptionalHeader != nil {
-		ctx.Response().Header.Set("optional-header", fmt.Sprint(*response.Headers.OptionalHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "optional-header", *response.Headers.OptionalHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header optional-header: %w", err)
+			}
+			ctx.Response().Header.Set("optional-header", v)
+		}
 	}
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
@@ -1054,8 +1218,20 @@ type UnionExample200ApplicationAlternativePlusJSONResponse struct {
 }
 
 func (response UnionExample200ApplicationAlternativePlusJSONResponse) VisitUnionExampleResponse(ctx *fiber.Ctx) error {
-	ctx.Response().Header.Set("header1", fmt.Sprint(response.Headers.Header1))
-	ctx.Response().Header.Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		ctx.Response().Header.Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		ctx.Response().Header.Set("header2", v)
+	}
 	ctx.Response().Header.Set("Content-Type", "application/alternative+json")
 	ctx.Status(200)
 
@@ -1068,12 +1244,24 @@ type UnionExample200JSONResponse struct {
 }
 
 func (response UnionExample200JSONResponse) VisitUnionExampleResponse(ctx *fiber.Ctx) error {
-	ctx.Response().Header.Set("header1", fmt.Sprint(response.Headers.Header1))
-	ctx.Response().Header.Set("header2", fmt.Sprint(response.Headers.Header2))
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header1", response.Headers.Header1, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header1: %w", err)
+		}
+		ctx.Response().Header.Set("header1", v)
+	}
+	{
+		v, err := runtime.StyleParamWithOptions("simple", false, "header2", response.Headers.Header2, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "integer", Format: ""})
+		if err != nil {
+			return fmt.Errorf("error styling response header header2: %w", err)
+		}
+		ctx.Response().Header.Set("header2", v)
+	}
 	ctx.Response().Header.Set("Content-Type", "application/json")
 	ctx.Status(200)
 
-	return ctx.JSON(&response.Body.union)
+	return ctx.JSON(&response.Body)
 }
 
 type UnionExample400Response = BadrequestResponse
@@ -1122,6 +1310,12 @@ type StrictServerInterface interface {
 	// (POST /reusable-responses)
 	ReusableResponses(ctx context.Context, request ReusableResponsesRequestObject) (ReusableResponsesResponseObject, error)
 
+	// (POST /reusable-urlencoded-response)
+	ReusableURLEncodedResponse(ctx context.Context, request ReusableURLEncodedResponseRequestObject) (ReusableURLEncodedResponseResponseObject, error)
+
+	// (POST /same-name-param-and-body-property/{name})
+	SameNameParamAndBodyProperty(ctx context.Context, request SameNameParamAndBodyPropertyRequestObject) (SameNameParamAndBodyPropertyResponseObject, error)
+
 	// (POST /text)
 	TextExample(ctx context.Context, request TextExampleRequestObject) (TextExampleResponseObject, error)
 
@@ -1141,8 +1335,11 @@ type StrictServerInterface interface {
 	UnionExample(ctx context.Context, request UnionExampleRequestObject) (UnionExampleResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx *fiber.Ctx, args any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx *fiber.Ctx, args any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares}
@@ -1153,12 +1350,26 @@ type strictHandler struct {
 	middlewares []StrictMiddlewareFunc
 }
 
+// validatedBodyLocalsKey is the c.Locals key under which fiber-middleware and
+// fiber-v3-middleware store the decoded request body value that passed
+// validation. It is defined here as well so generated code does not import the
+// middleware; keep it in sync with fibermiddleware.ValidatedBodyLocalsKey.
+const validatedBodyLocalsKey = "x-oapi-codegen-validated-body"
+
 // JSONExample operation middleware
 func (sh *strictHandler) JSONExample(ctx *fiber.Ctx) error {
 	var request JSONExampleRequestObject
 
 	var body JSONExampleJSONRequestBody
-	if err := ctx.BodyParser(&body); err != nil {
+	var err error
+	// The validation middleware stores the value a kin-openapi validator
+	// validated in the Fiber context. Bind that value, matching member
+	// names exactly, so the handler receives what was validated instead
+	// of a second, case-insensitive decode.
+	if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+		err = ctx.BodyParser(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
@@ -1166,7 +1377,7 @@ func (sh *strictHandler) JSONExample(ctx *fiber.Ctx) error {
 		request.Body = &body
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.JSONExample(ctx.UserContext(), request.(JSONExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1176,10 +1387,10 @@ func (sh *strictHandler) JSONExample(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(JSONExampleResponseObject); ok {
 		if err := validResponse.VisitJSONExampleResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1193,7 +1404,7 @@ func (sh *strictHandler) MultipartExample(ctx *fiber.Ctx) error {
 
 	request.Body = multipart.NewReader(bytes.NewReader(ctx.Request().Body()), string(ctx.Request().Header.MultipartFormBoundary()))
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.MultipartExample(ctx.UserContext(), request.(MultipartExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1203,10 +1414,10 @@ func (sh *strictHandler) MultipartExample(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(MultipartExampleResponseObject); ok {
 		if err := validResponse.VisitMultipartExampleResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1226,7 +1437,7 @@ func (sh *strictHandler) MultipartRelatedExample(ctx *fiber.Ctx) error {
 		request.Body = multipart.NewReader(bytes.NewReader(ctx.Request().Body()), boundary)
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.MultipartRelatedExample(ctx.UserContext(), request.(MultipartRelatedExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1236,10 +1447,10 @@ func (sh *strictHandler) MultipartRelatedExample(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(MultipartRelatedExampleResponseObject); ok {
 		if err := validResponse.VisitMultipartRelatedExampleResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1254,7 +1465,15 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(ctx *fiber.Ctx) error {
 	if strings.HasPrefix(string(ctx.Request().Header.ContentType()), "application/json") {
 
 		var body MultipleRequestAndResponseTypesJSONRequestBody
-		if err := ctx.BodyParser(&body); err != nil {
+		var err error
+		// The validation middleware stores the value a kin-openapi validator
+		// validated in the Fiber context. Bind that value, matching member
+		// names exactly, so the handler receives what was validated instead
+		// of a second, case-insensitive decode.
+		if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+			err = ctx.BodyParser(&body)
+		}
+		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				return fiber.NewError(fiber.StatusBadRequest, err.Error())
 			}
@@ -1283,7 +1502,7 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(ctx *fiber.Ctx) error {
 		}
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.MultipleRequestAndResponseTypes(ctx.UserContext(), request.(MultipleRequestAndResponseTypesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1293,10 +1512,10 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(MultipleRequestAndResponseTypesResponseObject); ok {
 		if err := validResponse.VisitMultipleRequestAndResponseTypesResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1308,7 +1527,7 @@ func (sh *strictHandler) MultipleRequestAndResponseTypes(ctx *fiber.Ctx) error {
 func (sh *strictHandler) NoContentHeaders(ctx *fiber.Ctx) error {
 	var request NoContentHeadersRequestObject
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.NoContentHeaders(ctx.UserContext(), request.(NoContentHeadersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1318,10 +1537,10 @@ func (sh *strictHandler) NoContentHeaders(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(NoContentHeadersResponseObject); ok {
 		if err := validResponse.VisitNoContentHeadersResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1334,12 +1553,20 @@ func (sh *strictHandler) RequiredJSONBody(ctx *fiber.Ctx) error {
 	var request RequiredJSONBodyRequestObject
 
 	var body RequiredJSONBodyJSONRequestBody
-	if err := ctx.BodyParser(&body); err != nil {
+	var err error
+	// The validation middleware stores the value a kin-openapi validator
+	// validated in the Fiber context. Bind that value, matching member
+	// names exactly, so the handler receives what was validated instead
+	// of a second, case-insensitive decode.
+	if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+		err = ctx.BodyParser(&body)
+	}
+	if err != nil {
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	}
 	request.Body = &body
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.RequiredJSONBody(ctx.UserContext(), request.(RequiredJSONBodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1349,10 +1576,10 @@ func (sh *strictHandler) RequiredJSONBody(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(RequiredJSONBodyResponseObject); ok {
 		if err := validResponse.VisitRequiredJSONBodyResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1368,7 +1595,7 @@ func (sh *strictHandler) RequiredTextBody(ctx *fiber.Ctx) error {
 	body := RequiredTextBodyTextRequestBody(data)
 	request.Body = &body
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.RequiredTextBody(ctx.UserContext(), request.(RequiredTextBodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1378,10 +1605,10 @@ func (sh *strictHandler) RequiredTextBody(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(RequiredTextBodyResponseObject); ok {
 		if err := validResponse.VisitRequiredTextBodyResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1395,7 +1622,7 @@ func (sh *strictHandler) ReservedGoKeywordParameters(ctx *fiber.Ctx, pType strin
 
 	request.Type = pType
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.ReservedGoKeywordParameters(ctx.UserContext(), request.(ReservedGoKeywordParametersRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1405,10 +1632,10 @@ func (sh *strictHandler) ReservedGoKeywordParameters(ctx *fiber.Ctx, pType strin
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(ReservedGoKeywordParametersResponseObject); ok {
 		if err := validResponse.VisitReservedGoKeywordParametersResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1421,7 +1648,15 @@ func (sh *strictHandler) ReusableResponses(ctx *fiber.Ctx) error {
 	var request ReusableResponsesRequestObject
 
 	var body ReusableResponsesJSONRequestBody
-	if err := ctx.BodyParser(&body); err != nil {
+	var err error
+	// The validation middleware stores the value a kin-openapi validator
+	// validated in the Fiber context. Bind that value, matching member
+	// names exactly, so the handler receives what was validated instead
+	// of a second, case-insensitive decode.
+	if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+		err = ctx.BodyParser(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
@@ -1429,7 +1664,7 @@ func (sh *strictHandler) ReusableResponses(ctx *fiber.Ctx) error {
 		request.Body = &body
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.ReusableResponses(ctx.UserContext(), request.(ReusableResponsesRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1439,10 +1674,85 @@ func (sh *strictHandler) ReusableResponses(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(ReusableResponsesResponseObject); ok {
 		if err := validResponse.VisitReusableResponsesResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// ReusableURLEncodedResponse operation middleware
+func (sh *strictHandler) ReusableURLEncodedResponse(ctx *fiber.Ctx) error {
+	var request ReusableURLEncodedResponseRequestObject
+
+	var body ReusableURLEncodedResponseFormdataRequestBody
+	if err := ctx.BodyParser(&body); err != nil {
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	}
+	request.Body = &body
+
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
+		return sh.ssi.ReusableURLEncodedResponse(ctx.UserContext(), request.(ReusableURLEncodedResponseRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ReusableURLEncodedResponse")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(ReusableURLEncodedResponseResponseObject); ok {
+		if err := validResponse.VisitReusableURLEncodedResponseResponse(ctx); err != nil {
+			return err
+		}
+	} else if response != nil {
+		return fmt.Errorf("unexpected response type: %T", response)
+	}
+	return nil
+}
+
+// SameNameParamAndBodyProperty operation middleware
+func (sh *strictHandler) SameNameParamAndBodyProperty(ctx *fiber.Ctx, name string) error {
+	var request SameNameParamAndBodyPropertyRequestObject
+
+	request.Name = name
+
+	var body SameNameParamAndBodyPropertyJSONRequestBody
+	var err error
+	// The validation middleware stores the value a kin-openapi validator
+	// validated in the Fiber context. Bind that value, matching member
+	// names exactly, so the handler receives what was validated instead
+	// of a second, case-insensitive decode.
+	if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+		err = ctx.BodyParser(&body)
+	}
+	if err != nil {
+		if !errors.Is(err, io.EOF) {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
+		return sh.ssi.SameNameParamAndBodyProperty(ctx.UserContext(), request.(SameNameParamAndBodyPropertyRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SameNameParamAndBodyProperty")
+	}
+
+	response, err := handler(ctx, request)
+
+	if err != nil {
+		return err
+	} else if validResponse, ok := response.(SameNameParamAndBodyPropertyResponseObject); ok {
+		if err := validResponse.VisitSameNameParamAndBodyPropertyResponse(ctx); err != nil {
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1460,7 +1770,7 @@ func (sh *strictHandler) TextExample(ctx *fiber.Ctx) error {
 		request.Body = &body
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.TextExample(ctx.UserContext(), request.(TextExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1470,10 +1780,10 @@ func (sh *strictHandler) TextExample(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(TextExampleResponseObject); ok {
 		if err := validResponse.VisitTextExampleResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1487,7 +1797,7 @@ func (sh *strictHandler) UnknownExample(ctx *fiber.Ctx) error {
 
 	request.Body = bytes.NewReader(ctx.Request().Body())
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.UnknownExample(ctx.UserContext(), request.(UnknownExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1497,10 +1807,10 @@ func (sh *strictHandler) UnknownExample(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(UnknownExampleResponseObject); ok {
 		if err := validResponse.VisitUnknownExampleResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1516,7 +1826,7 @@ func (sh *strictHandler) UnspecifiedContentType(ctx *fiber.Ctx) error {
 
 	request.Body = bytes.NewReader(ctx.Request().Body())
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.UnspecifiedContentType(ctx.UserContext(), request.(UnspecifiedContentTypeRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1526,10 +1836,10 @@ func (sh *strictHandler) UnspecifiedContentType(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(UnspecifiedContentTypeResponseObject); ok {
 		if err := validResponse.VisitUnspecifiedContentTypeResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1547,7 +1857,7 @@ func (sh *strictHandler) URLEncodedExample(ctx *fiber.Ctx) error {
 	}
 	request.Body = &body
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.URLEncodedExample(ctx.UserContext(), request.(URLEncodedExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1557,10 +1867,10 @@ func (sh *strictHandler) URLEncodedExample(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(URLEncodedExampleResponseObject); ok {
 		if err := validResponse.VisitURLEncodedExampleResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1575,7 +1885,15 @@ func (sh *strictHandler) HeadersExample(ctx *fiber.Ctx, params HeadersExamplePar
 	request.Params = params
 
 	var body HeadersExampleJSONRequestBody
-	if err := ctx.BodyParser(&body); err != nil {
+	var err error
+	// The validation middleware stores the value a kin-openapi validator
+	// validated in the Fiber context. Bind that value, matching member
+	// names exactly, so the handler receives what was validated instead
+	// of a second, case-insensitive decode.
+	if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+		err = ctx.BodyParser(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
@@ -1583,7 +1901,7 @@ func (sh *strictHandler) HeadersExample(ctx *fiber.Ctx, params HeadersExamplePar
 		request.Body = &body
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.HeadersExample(ctx.UserContext(), request.(HeadersExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1593,10 +1911,10 @@ func (sh *strictHandler) HeadersExample(ctx *fiber.Ctx, params HeadersExamplePar
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(HeadersExampleResponseObject); ok {
 		if err := validResponse.VisitHeadersExampleResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1609,7 +1927,15 @@ func (sh *strictHandler) UnionExample(ctx *fiber.Ctx) error {
 	var request UnionExampleRequestObject
 
 	var body UnionExampleJSONRequestBody
-	if err := ctx.BodyParser(&body); err != nil {
+	var err error
+	// The validation middleware stores the value a kin-openapi validator
+	// validated in the Fiber context. Bind that value, matching member
+	// names exactly, so the handler receives what was validated instead
+	// of a second, case-insensitive decode.
+	if v := ctx.Locals(validatedBodyLocalsKey); v == nil || runtime.BindJSONValue(v, &body) != nil {
+		err = ctx.BodyParser(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			return fiber.NewError(fiber.StatusBadRequest, err.Error())
 		}
@@ -1617,7 +1943,7 @@ func (sh *strictHandler) UnionExample(ctx *fiber.Ctx) error {
 		request.Body = &body
 	}
 
-	handler := func(ctx *fiber.Ctx, request interface{}) (interface{}, error) {
+	handler := func(ctx *fiber.Ctx, request any) (any, error) {
 		return sh.ssi.UnionExample(ctx.UserContext(), request.(UnionExampleRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -1627,10 +1953,10 @@ func (sh *strictHandler) UnionExample(ctx *fiber.Ctx) error {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+		return err
 	} else if validResponse, ok := response.(UnionExampleResponseObject); ok {
 		if err := validResponse.VisitUnionExampleResponse(ctx); err != nil {
-			return fiber.NewError(fiber.StatusBadRequest, err.Error())
+			return err
 		}
 	} else if response != nil {
 		return fmt.Errorf("unexpected response type: %T", response)
@@ -1643,27 +1969,31 @@ func (sh *strictHandler) UnionExample(ctx *fiber.Ctx) error {
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
+	"7FrbbhtHD34VYvJf/E13vbLjIoDukiBI27ROYMdXTS6oHUqaZHdmMzNrWRAE9CH6hH2SYg6r48qRGh2C",
+	"oFe2dkkOhx/JITk7YbkqKyVJWsO6E6bJVEoa8j96yDV9rslY94uTybWorFCSddlz5Nfx3TRhmmqDvYIa",
+	"dkefK2lJelasqkLk6Fizj8bxT5jJh1Si++9/mvqsyx5lc1Wy8NZkdI9lVRCbTqfJigZvXrOEDQk5aa9t",
+	"+Pc87OJzLTRx1rW6pmRhLTuuiHWZsVrIAXNCA9vFVmxCWhqQdtosbLrWBclcceJbbP8+HY1GaV/pMp3z",
+	"7cse7mGkdIIa4u6EVVpVpK0IwN5hUVO7OeIT1ftIuYfWYElXWLZIkfHpspCE3acKK5G6nQ1IpnRvNaYW",
+	"B56pQo0l6wbmacuK7pGQfbXuci+UtCikAS76fdIkLUQjg5NhwNRVpbQlDr0xOHVyC4b0HWmWMCusMwW7",
+	"WXwO0USGJeyOtAkLnZ91zjpu76oiiZVgXfbEP0pYhXbo9zHz40q1hcevN2+uQBjA2qoSrcixKMZQojZD",
+	"LIiDkFY5FevcmjPmV9LeQX7hkftlBC9hMQafKz4+RFx5T16I+otO50jhO03YZaezScZMqWwhD3kxfayL",
+	"Fpvfyk9SjSSQ1qqJ0aysCysq1HYRq2Vr/96QbGPymbzMxzBHiwey+r5WOrXhU00FWuJbAHAdKHfDYUH8",
+	"QVH4mnVOikFBi6ZfZrsZqpGBoRqBVcAJCxgJO4SGcSXBCgkIRshBQdAolbSCWVCsDp5Jfh338s7JOHg+",
+	"Sw5z3CZMlDigrJKDZXYnGy3rst7YEktajtQ9BXLCLN3brCpQrBhmdckjpfT/LL23wA7hKlUaIUoX6tr2",
+	"wL2a0cL/LzqXP0AjOASw8nRYAEoOsi4KV6jOaaJ4+PvPv4DuSefCkAE7RAu1NGRnBKgJVCmsK6r6WpVg",
+	"h3Mxa7F/pV4EnX6O6q/54WXbTiByLdfzjdbRFstANC+bUn3dFxoLtLKvR0xAoOkAUhcTaS9mqHYEYoID",
+	"R+VKvYY3AaOgFMblyfDSDFVdcMBihGMTMvR6zXcd2V3t51PjwQu/ZKXh+b4LwRm0LrZPA+07urdfhHaH",
+	"1LMrfMfOartD5Lsyng5U+onGI6V56vtFsqRNNnF6Tp2sAbWIfDujhBwl9AgklsQB+5Y0vFIQRZoWfMK6",
+	"r9TrQDIX5Vu+2Y/uHxPmjOfbQJbEDjjYL9lh6vDhsFA11gzjiXRpqU0OH0ka02nqG1cStmHcYr+w0vUC",
+	"xWma1od9c21KdRynjjDMq6J0cU7UDsgzcBXM/MCOsKADZhMuYJXaiM3t9W8vw+rX89N7O5D2N7L6KtRa",
+	"xmzHwM9gSakL9JCKUpTcnx5pHIaNs4l7O30ouAaajBFKgnWnSl9pEMbUBI/On/70tAsILp/ALNFAWRsL",
+	"UlkHeU/Vkr+XfmCETdcVDp9GA/jo6HuUY23IVWjuXHKVG/oUePZerrnFTZzq+Uz3THLnAm+juK1ynv+z",
+	"c87bf06YjScP3PYsrrOac1/mQ+XLZ1rGp4f5p8aNXELfPAFxlcE2U489doDfejFQh4ebbRa5tjHbv2wo",
+	"t7DineCksrK63FHyyYxqKspFXxCftZpBt03J64WSuSa7PAlyNbFLTzNhbuDu3D9YwJfJIwpprEJjQFh/",
+	"aBUiDO35eut4O9csdoPvxtU2qD4+EKaPT4XoZed8d5YnB/abpXN/QzzOKoxdry4OXmCc5C7uCOHsRj1f",
+	"HhXFYcy8tM9J3LnGSHLQZGsticOdwOY+ai02o4A5rG3lQVBjXiA017G71AjJg7Iu2INXsh++45uy0110",
+	"J0eewx0ramopHrq/vZW+XA9H0OpJJZT8Rm9nsbCkJVpxRz/uZ6y/LkVJetP3cb+CXrLlCh++xY85Dut1",
+	"04SFDw5Cwqx14bKatVU3y8KHCmdmhIMB6TOhMqyEs9I/AwA=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

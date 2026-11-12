@@ -2,7 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -26,6 +28,26 @@ func TestFiberServer(t *testing.T) {
 	r := fiber.New()
 	RegisterHandlers(r, strictHandler)
 	testImpl(t, adaptor.FiberApp(r))
+}
+
+type erroringServer struct{ StrictServer }
+
+func (erroringServer) JSONExample(ctx context.Context, request JSONExampleRequestObject) (JSONExampleResponseObject, error) {
+	return nil, errors.New("handler failure")
+}
+
+// Errors returned by strict handlers used to be wrapped in
+// fiber.NewError(StatusBadRequest, ...); they must reach fiber's error
+// chain untouched, where the default handler reports them as 500.
+func TestFiberHandlerErrorIsServerError(t *testing.T) {
+	strictHandler := NewStrictHandler(erroringServer{}, nil)
+	r := fiber.New()
+	RegisterHandlers(r, strictHandler)
+
+	value := "123"
+	requestBody := clientAPI.Example{Value: &value}
+	rr := testutil.NewRequest().Post("/json").WithJsonBody(requestBody).GoWithHTTPHandler(t, adaptor.FiberApp(r)).Recorder
+	assert.Equal(t, http.StatusInternalServerError, rr.Code)
 }
 
 func testImpl(t *testing.T, handler http.Handler) {
@@ -220,6 +242,18 @@ func testImpl(t *testing.T, handler http.Handler) {
 		err := json.NewDecoder(rr.Body).Decode(&responseBody)
 		assert.NoError(t, err)
 		assert.Equal(t, requestBody, responseBody)
+	})
+	t.Run("ReusableURLEncodedResponse", func(t *testing.T) {
+		// The operation embeds the reusable form envelope, which must be
+		// encoded itself rather than as a field of the operation's struct.
+		value := "zxcv"
+		requestBody := clientAPI.Example{Value: &value}
+		requestBodyEncoded, err := runtime.MarshalForm(&requestBody, nil)
+		assert.NoError(t, err)
+		rr := testutil.NewRequest().Post("/reusable-urlencoded-response").WithContentType("application/x-www-form-urlencoded").WithBody([]byte(requestBodyEncoded.Encode())).GoWithHTTPHandler(t, handler).Recorder
+		assert.Equal(t, http.StatusOK, rr.Code)
+		assert.Equal(t, "application/x-www-form-urlencoded", rr.Header().Get("Content-Type"))
+		assert.Equal(t, "value=zxcv", rr.Body.String())
 	})
 	t.Run("UnionResponses", func(t *testing.T) {
 		value := "union"

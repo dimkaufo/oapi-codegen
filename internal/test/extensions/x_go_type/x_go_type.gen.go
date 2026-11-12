@@ -8,7 +8,6 @@ import (
 	"compress/flate"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -104,7 +103,7 @@ type MyTestRequestNestedField struct {
 	Field2 string `json:"field2"`
 }
 
-// MyTestRequest defines model for .
+// MyTestRequest defines model for Test.
 type MyTestRequest struct {
 	// Field1 A array of enum values
 	Field1 *[]TestField1 `json:"field1,omitempty"`
@@ -306,7 +305,7 @@ func NewExampleGetRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/example")
+	operationPath := "/example"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -333,7 +332,7 @@ func NewExampleGet2Request(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/example2")
+	operationPath := "/example2"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -360,7 +359,7 @@ func NewGetRootRequest(server string, params *GetRootParams) (*http.Request, err
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/root")
+	operationPath := "/root"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -404,7 +403,7 @@ func NewGetRootRequest(server string, params *GetRootParams) (*http.Request, err
 // NewTestRequestWithApplicationTestPlusJSONBody calls the generic Test builder with application/test+json body
 func NewTestRequestWithApplicationTestPlusJSONBody(server string, body TestApplicationTestPlusJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -421,7 +420,7 @@ func NewTestRequestWithBody(server string, contentType string, body io.Reader) (
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/test")
+	operationPath := "/test"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -732,7 +731,7 @@ func ParseExampleGetResponse(rsp *http.Response) (*ExampleGetResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Document
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -758,7 +757,7 @@ func ParseExampleGet2Response(rsp *http.Response) (*ExampleGet2Response, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest DocumentStatus
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -915,8 +914,8 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 
 	router.GET(options.BaseURL+"/example", wrapper.ExampleGet, options.OperationMiddlewares["exampleGet"]...)
 	router.GET(options.BaseURL+"/example2", wrapper.ExampleGet2, options.OperationMiddlewares["exampleGet2"]...)
-	router.GET(options.BaseURL+"/root", wrapper.GetRoot, options.OperationMiddlewares["getRoot"]...)
 	router.GET(options.BaseURL+"/test", wrapper.Test, options.OperationMiddlewares["test"]...)
+	router.GET(options.BaseURL+"/root", wrapper.GetRoot, options.OperationMiddlewares["getRoot"]...)
 
 }
 
@@ -925,21 +924,21 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"zFZfb9tGDP8qAre3yZLjbi/qU4dshbE/AZoVe2gD4yzR8rXSUbmjUhuBvvvAkyxLkZpkBbb2Jb4ceeSP",
-	"/37iPaRUVmTQsIPkHly6x1L54yWldYmG5VxZqtCyRi8xqkT55WOFkIBjq00OTQiOFddeBU1dQvIOyCCE",
-	"wJ9I/u4tyn87qi3chA+eh3BY5LSQy0XroEewuW7tNk3/iLYfMGXxeVK67n2Pwd6pop5DO2drfTlVHOCC",
-	"BHKivMC61ln09u36coRalxVZPidooAwhVIr3cqd5X2+jlMq4FcdeLnCuqcS1YczRDmDo7uZRT1YxDnxQ",
-	"oUwekc3jQ8y6xNjLTz6u2ngnmdKGN8ptRHdT6FJ7le8t7iCB7+Jzn8Rdk8RDwOM0iY3od2+jCU+Gu4R+",
-	"sdFzn3UGfea+2Nx/V8omBIu3tbaYyQyMw+/Rb3W+0YYHk3BuxL/QzRRop7HILuSUoUutrliTgQReBcpa",
-	"dQxoF8jcBb7lnXhiLMfj6J9cQNidVtM5bEIo1WHdvvypl3oPIvQgVnMgDDrGLGijCD5p3geqKChVcuvz",
-	"GH42oM7LlqhAZcZ+poM7zG5no38wSecMsfxxlAS/wdsaHf/pYf8qr3u/L54XH9X8TYQ4JbOngvZNdqzw",
-	"b837V0VxtZuhAz9bqhW+e3zK1pfQhPcDn+6jrhZtj6liUZGwmIWEbY3NzSz3ntBcdY/agkxQKf5qFB0+",
-	"M74QFG/O9ftaH5QHTTTENNNAnlV3NO37Hk6wIxv4A92htTpD9zJ4CNYr4YHRGlUElUo/qhzdy/dm3I5e",
-	"TZtCG2wpy6JRpTZ5oEz2YNBOoqGRIKVyqw1mLc08UZfovZH1Q3MhIQs64zQZFx82OW18JkK4Q+vaiC+i",
-	"ZbSUclOFRlUaEngRXUTLLue+DWM8qLIq/GKRo6+RdKkSx+sMEvillb9GmUWLriLj2g5eLZfyk5LhbrtS",
-	"VVXo1L+NPzjBcFrEnvq69TuaL+C4cFe/yW0T9lhXzwC7+j/Q9uvcI5gtEX8W72vkNyKXglhVIqN1nqO0",
-	"GLmt0R4hPA2NEr0zwB3ZUkgEMsW4kO0Iwm+bT5qb+ZqMUyeLTpApVqcMcrdDzGbQLxgtQaDjnyk7PlJl",
-	"sfTDvyu1t990JDSC/uMUek7kCatpmn8CAAD//w==",
+	"zFZbb9s2FP4rwtneJkuOu72oTx2yFcYuAZoVe2gDg5aOZbYiD0MepTYC/feBlCxLseKmBdbmJWZ4bt+5",
+	"feI95KQMadTsILsHl29RiXC8pLxWqNmfjSWDliUGiRYK/S/vDUIGjq3UJTQxOBZcBxXUtYLsHZBGiIE/",
+	"kf+7tej/21Bt4SZ+YB7DblbSzF/O2gA9gtV167dpeiNaf8CcfcyD0nUfewz2TlT1FNopX8vLU8UBLsig",
+	"JCorrGtZJG/fLi9HqKUyZPlYoIEyxGAEb/2d5G29TnJSaStOg9zDuSaFS81Yoh3AkN3N2UhWMA5iUCV0",
+	"mZAt013KUmEa5IcYV22+J5WSmlfCrbzuqpJKBpUfLW4ggx/S45yk3ZCkQ8DjMnkfyZ/BRxMfHHcF/Wqn",
+	"xznrHIbKfbW7/6+VTQwWb2tpsfA7ME6/R7+W5UpqhpuJQfwH3USDNhKr4sKfCnS5lYYlacjgVSSsFfuI",
+	"NpHfuyiMvPORGNV4HYPJBcTdaXG6h00MSuyWreUvvTRE8MIAYjEFQqNjLKI2i+iT5G0kqopy4W9DHeNH",
+	"E+qirIkqFHoc53Rxh9XtfPQGJ+WcIJa/9r7Ab/C2Rsd/B9i/e+s+7oun5Uc1P4sUm+ZLkw5Dtjf4r+Tt",
+	"q6q62kzQQdgt0Qrfnd+y5SU08f0gpvsozaydMVHNDHkWs5CxrbG5meTeA5qrzqhtyAkqwd+NouMn5heD",
+	"4NWxf9/rg/JgiIaYJgYosOqGTue+hxNtyEbhQHdorSzQvYwegg1KuGO0WlSREflHUaJ7+V6PxzGoSV1J",
+	"jS1lWdRCSV1GQhcPFu0gGjqJclJrqbFoaeYzfUnea4iBJVcIGXh02knSLt2tSlp5O4jhDq1rM75I5snc",
+	"t5sMamEkZPAiuUjmXc3DGKa4E8pU4WFRYuiRn1LhAy8LyOC3Vv4aGXwfnCHt2glezOf+JyfN3etKGFPJ",
+	"PNimHxzp40Psc1+3/o0WGjhu3NUf/raJe6yLJ4BdfAu0/XPuDGZLxI/ifY38xst9Q6xQyGhd4CjpndzW",
+	"aPcQH5ZGeL0jwA1ZJRgyKATjjGXg7GfNJ83NdE/GpfMPnagQLA4VZHSPVzA8MFqCQMe/UrE/02Xv6acv",
+	"a3Xw33QkNIL+8yn0kigQVtM0/w0A",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

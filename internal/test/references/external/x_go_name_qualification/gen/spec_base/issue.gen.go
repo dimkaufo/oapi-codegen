@@ -5,14 +5,13 @@ package spec_base
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
 
 	externalRef0 "github.com/oapi-codegen/oapi-codegen/v2/internal/test/references/external/x_go_name_qualification/gen/spec_ext"
+	"github.com/oapi-codegen/runtime"
 )
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
@@ -115,7 +114,7 @@ func NewGetOutcomeRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/outcome")
+	operationPath := "/outcome"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -251,7 +250,7 @@ func ParseGetOutcomeResponse(rsp *http.Response) (*GetOutcomeResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest externalRef0.OutcomeResult
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest

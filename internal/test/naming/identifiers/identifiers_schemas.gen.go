@@ -21,7 +21,7 @@ import (
 )
 
 // N5StartsWithNumber This schema name starts with a number
-type N5StartsWithNumber = map[string]interface{}
+type N5StartsWithNumber = map[string]any
 
 // StringInPath defines model for StringInPath.
 type StringInPath = string
@@ -173,7 +173,7 @@ func NewIssue209Request(server string, str StringInPath) (*http.Request, error) 
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/issues/209/$%s", pathParam0)
+	operationPath := "/issues/209/$" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -207,7 +207,7 @@ func NewIssue30Request(server string, pFallthrough string) (*http.Request, error
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/issues/30/%s", pathParam0)
+	operationPath := "/issues/30/" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -241,7 +241,7 @@ func NewIssue41Request(server string, n1param N5StartsWithNumber) (*http.Request
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/issues/41/%s", pathParam0)
+	operationPath := "/issues/41/" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -534,7 +534,7 @@ func (w *ServerInterfaceWrapper) Issue209(ctx echo.Context) error {
 	// ------------- Path parameter "str" -------------
 	var str StringInPath
 
-	err = runtime.BindStyledParameterWithOptions("simple", "str", ctx.Param("str"), &str, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "str", ctx.Param("str"), &str, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: ctx.Request().URL.RawPath == ""})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter str: %s", err))
 	}
@@ -550,7 +550,7 @@ func (w *ServerInterfaceWrapper) Issue30(ctx echo.Context) error {
 	// ------------- Path parameter "fallthrough" -------------
 	var pFallthrough string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "fallthrough", ctx.Param("fallthrough"), &pFallthrough, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "fallthrough", ctx.Param("fallthrough"), &pFallthrough, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: ctx.Request().URL.RawPath == ""})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter fallthrough: %s", err))
 	}
@@ -566,7 +566,7 @@ func (w *ServerInterfaceWrapper) Issue41(ctx echo.Context) error {
 	// ------------- Path parameter "1param" -------------
 	var n1param N5StartsWithNumber
 
-	err = runtime.BindStyledParameterWithOptions("simple", "1param", ctx.Param("1param"), &n1param, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "object", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "1param", ctx.Param("1param"), &n1param, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "object", Format: "", ValueIsUnescaped: ctx.Request().URL.RawPath == ""})
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, fmt.Sprintf("Invalid format for parameter 1param: %s", err))
 	}
@@ -623,9 +623,9 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 		Handler: si,
 	}
 
-	router.GET(options.BaseURL+"/issues/209/$:str", wrapper.Issue209, options.OperationMiddlewares["Issue209"]...)
 	router.GET(options.BaseURL+"/issues/30/:fallthrough", wrapper.Issue30, options.OperationMiddlewares["Issue30"]...)
 	router.GET(options.BaseURL+"/issues/41/:1param", wrapper.Issue41, options.OperationMiddlewares["Issue41"]...)
+	router.GET(options.BaseURL+"/issues/209/$:str", wrapper.Issue209, options.OperationMiddlewares["Issue209"]...)
 
 }
 
@@ -634,16 +634,16 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"lFRNb9tIDP0rBDeHXUC25CR7iG5FgQbpoQiaADkkPow1lDWNNKNyKKeGMf+9mJEdO7X7daRI6r3HR84G",
-	"K9f1zpIVj+UGe8WqIyFO0Z2wscsbe6ukibEmX7HpxTiLJb4Dn/LQK2ngtRMzNDEdv2KGVnWEJXqJCaav",
-	"g2HSWAoPlKGvGupU/LWs+22ZsUsMIeySicj/d6JY/IOR5tPQLYiP2dw3xsPYAhETfGqBFyMNKLBjW7YD",
-	"cosvVAkmHKoGNrK+i82U8FRVkfcTcc9kY7wgxcQfHHdKsMSPD/eTOgUwVkKqnD5Z3NKOEGPTHrIR6Udl",
-	"xtbuWME1WWIVA3A1rFRrNFw7MJqsmNoQe6jZdcDkiVek4ZnWL461z0CbpZFJS0pHP6J8nz3ZM6Z6oqlq",
-	"FZPeG+QzUFZDs+4bskpIw24Ck5H7+INRjRhpI3mrOmOX+SGZf7cGQe1a/R9muCL2o5TZtJgWGDJ0PVnV",
-	"GyzxYlpMZ5iltUgzzo33A/n8vLjKzzZeOMSvS5LjybxvqHr2YOoDEaCYYC+OXU/crjFBjlO80VjiTQQ5",
-	"L67S8vneWR8dtkPbhuzNtj9uMM4LS/wn399Evi/J31xDmIfsVcJFkW9q1bbSsBuWTThW8PlHz8A3bmg1",
-	"LAh6ptp8Iw3GwkqxUYt2ZwFmu4GcUHVR/ImoE7d4QPWvbvJQ8uUs38wS1M9tu90xOTjIuJ/pJF8P8oSy",
-	"y3FRfqdjxP+lhFOWbtc2P35UQpgfT/TwiUhM3j4Oj/MwD98DAAD//w==",
+	"lFRBb9s8DP0rBL8evgFO7LTdob4NA1Z0h6FYC/TQ9qBYdKzVljyKThcE/u+DpKZxl2zDjjRJvfdIPm+x",
+	"cl3vLFnxWG6xV6w6EuIY3Qgbu7qy10qaEGvyFZtejLNY4gfwMQ+9kgZeOzFDE9LhK2ZoVUdYopeQYPo+",
+	"GCaNpfBAGfqqoU6Fp2XTv5QZu8JxHHfJSOT9jSgWf2ek+TJ0S+JDNreN8ZBaIGCCjy3wbKQBBTa1ZTsg",
+	"t/xGlWDEoWpgI5ub0EwRT1UVeT8T90Q2xEtSTPzJcacES/x8dzurYwCpEmLl/MHiC+0AkZr2kI1In5QZ",
+	"W7tDBZdkiVUIwNWwVq3RcOnAaLJiakPsoWbXAZMnXpOGJ9o8O9Y+A21WRmYtKR32EeT77MGeMNUzTVWr",
+	"mPR+QT4DZTU0m74hq4Q07CYwS9zTA0mNGGkDeas6Y1f5lMz/LwuC2rX6HWa4JvZJymJezAscM3Q9WdUb",
+	"LPFsXswXmMWziDPOjfcD+fy0uMhPtl54DF9XJIeT+dhQ9eTB1BMRoJhgL45dT9xuMEKmKV5pLPEqgJwW",
+	"F4HM9LjvtxjGgyX+l+8tkO9L8jfHPz6O2SvjsyLf1qptpWE3rJrxkPDXX1cEvnFDq2FJ0DPV5gdpMBbW",
+	"io1atruJY7bTf0TEWXFEwxGnTZj9k+OmCs8X+XYRoX6/lOsdk4ndwvVFw73a7YiQ83QGf9OR8P8o4dgG",
+	"U9bnh7+MIHHq9wj81un3j+Pj+HMA",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

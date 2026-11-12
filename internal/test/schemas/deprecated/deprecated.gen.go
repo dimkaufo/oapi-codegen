@@ -8,7 +8,6 @@ package schemasdeprecated
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -357,7 +356,7 @@ func (c *APIClient) GetLegacy(ctx context.Context, reqEditors ...RequestEditorFn
 // NewPostClientsRequest calls the generic PostClients builder with application/json body
 func NewPostClientsRequest(server string, body PostClientsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -374,7 +373,7 @@ func NewPostClientsRequestWithBody(server string, contentType string, body io.Re
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/clients")
+	operationPath := "/clients"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -403,7 +402,7 @@ func NewGetDeprecatedEndpointRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/deprecated_endpoint")
+	operationPath := "/deprecated_endpoint"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -424,7 +423,7 @@ func NewGetDeprecatedEndpointRequest(server string) (*http.Request, error) {
 // NewPostDeprecatedEndpointWithNonDeprecatedBodyRequest calls the generic PostDeprecatedEndpointWithNonDeprecatedBody builder with application/json body
 func NewPostDeprecatedEndpointWithNonDeprecatedBodyRequest(server string, body PostDeprecatedEndpointWithNonDeprecatedBodyJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -441,7 +440,7 @@ func NewPostDeprecatedEndpointWithNonDeprecatedBodyRequestWithBody(server string
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/deprecated_endpoint_with_non_deprecated_body")
+	operationPath := "/deprecated_endpoint_with_non_deprecated_body"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -470,7 +469,7 @@ func NewGetDeprecatedFieldRequest(server string, params *GetDeprecatedFieldParam
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/deprecated_field")
+	operationPath := "/deprecated_field"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -543,7 +542,7 @@ func NewGetDeprecatedParamsOldIdRequest(server string, oldId string, params *Get
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/deprecated_params/%s", pathParam0)
+	operationPath := "/deprecated_params/" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -596,7 +595,7 @@ func NewGetDeprecatedParamsOldIdRequest(server string, oldId string, params *Get
 // NewPostDeprecatedRequestBodyRequest calls the generic PostDeprecatedRequestBody builder with application/json body
 func NewPostDeprecatedRequestBodyRequest(server string, body PostDeprecatedRequestBodyJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -613,7 +612,7 @@ func NewPostDeprecatedRequestBodyRequestWithBody(server string, contentType stri
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/deprecated_request_body")
+	operationPath := "/deprecated_request_body"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -642,7 +641,7 @@ func NewGetLegacyRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/legacy")
+	operationPath := "/legacy"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -948,6 +947,12 @@ func (r GetDeprecatedFieldResponse) ContentType() string {
 	return ""
 }
 
+// GetDeprecatedParamsOldIdResponse200Headers the declared response headers of an HTTP 200 response for GetDeprecatedParamsOldId
+type GetDeprecatedParamsOldIdResponse200Headers struct {
+	// Deprecated: Use the Authorization header instead.
+	XOldToken *string
+}
+
 type GetDeprecatedParamsOldIdResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -955,6 +960,8 @@ type GetDeprecatedParamsOldIdResponse struct {
 	JSON200 *struct {
 		Result *string `json:"result,omitempty"`
 	}
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetDeprecatedParamsOldIdResponse200Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -1034,11 +1041,20 @@ func (r PostDeprecatedRequestBodyResponse) ContentType() string {
 	return ""
 }
 
+// GetLegacyResponse200Headers the declared response headers of an HTTP 200 response for GetLegacy
+type GetLegacyResponse200Headers struct {
+	XCorrelationId *string
+	// Deprecated: Use X-Trace-Id instead.
+	XOldTrace *string
+}
+
 type GetLegacyResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	// JSON200 the response for an HTTP 200 `application/json` response
 	JSON200 *LegacyResponse
+	// Headers200 the parsed response headers for an HTTP 200 response
+	Headers200 *GetLegacyResponse200Headers
 }
 
 // GetJSON200 returns the response for an HTTP 200 `application/json` response
@@ -1212,7 +1228,7 @@ func ParsePostClientsResponse(rsp *http.Response) (*PostClientsResponse, error) 
 			// Deprecated: This field and its type are both deprecated.
 			DeprecatedRefAndField *DeprecatedObject `json:"deprecated_ref_and_field,omitempty"`
 		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -1241,7 +1257,7 @@ func ParseGetDeprecatedEndpointResponse(rsp *http.Response) (*GetDeprecatedEndpo
 			IsDeprecated  *ClientWithExtension `json:"is_deprecated,omitempty"`
 			NotDeprecated *string              `json:"not_deprecated,omitempty"`
 		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -1290,7 +1306,7 @@ func ParseGetDeprecatedFieldResponse(rsp *http.Response) (*GetDeprecatedFieldRes
 			IsDeprecated      *ClientWithExtension `json:"is_deprecated,omitempty"`
 			NotDeprecated     *string              `json:"not_deprecated,omitempty"`
 		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -1318,11 +1334,24 @@ func ParseGetDeprecatedParamsOldIdResponse(rsp *http.Response) (*GetDeprecatedPa
 		var dest struct {
 			Result *string `json:"result,omitempty"`
 		}
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetDeprecatedParamsOldIdResponse200Headers
+		if values := rsp.Header.Values("X-Old-Token"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Old-Token", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XOldToken = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
@@ -1344,7 +1373,7 @@ func ParsePostDeprecatedRequestBodyResponse(rsp *http.Response) (*PostDeprecated
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest DeprecatedObject
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -1370,11 +1399,31 @@ func ParseGetLegacyResponse(rsp *http.Response) (*GetLegacyResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest LegacyResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
+	}
+
+	switch {
+	case rsp.StatusCode == 200:
+		var headers GetLegacyResponse200Headers
+		if values := rsp.Header.Values("X-Correlation-Id"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Correlation-Id", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XCorrelationId = &value
+		}
+		if values := rsp.Header.Values("X-Old-Trace"); len(values) > 0 {
+			var value string
+			if err := runtime.BindStyledParameterWithOptions("simple", "X-Old-Trace", values[0], &value, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationHeader, Explode: false, Required: false, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			}
+			headers.XOldTrace = &value
+		}
+		response.Headers200 = &headers
 	}
 
 	return response, nil
@@ -1517,7 +1566,7 @@ func (siw *ServerInterfaceWrapper) GetDeprecatedParamsOldId(w http.ResponseWrite
 	// ------------- Path parameter "old_id" -------------
 	var oldId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "old_id", r.PathValue("old_id"), &oldId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	err = runtime.BindStyledParameterWithOptions("simple", "old_id", r.PathValue("old_id"), &oldId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "", ValueIsUnescaped: true})
 	if err != nil {
 		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "old_id", Err: err})
 		return
@@ -1721,12 +1770,12 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/clients", wrapper.PostClients)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/deprecated_endpoint", wrapper.GetDeprecatedEndpoint)
-	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/deprecated_endpoint_with_non_deprecated_body", wrapper.PostDeprecatedEndpointWithNonDeprecatedBody)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/deprecated_field", wrapper.GetDeprecatedField)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/deprecated_params/{old_id}", wrapper.GetDeprecatedParamsOldId)
 	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/deprecated_request_body", wrapper.PostDeprecatedRequestBody)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/clients", wrapper.PostClients)
+	m.HandleFunc(http.MethodPost+" "+options.BaseURL+"/deprecated_endpoint_with_non_deprecated_body", wrapper.PostDeprecatedEndpointWithNonDeprecatedBody)
 	m.HandleFunc(http.MethodGet+" "+options.BaseURL+"/legacy", wrapper.GetLegacy)
 
 	return m
@@ -1761,7 +1810,7 @@ type PostClients200JSONResponse struct {
 func (response PostClients200JSONResponse) VisitPostClientsResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1785,7 +1834,7 @@ type GetDeprecatedEndpoint200JSONResponse struct {
 func (response GetDeprecatedEndpoint200JSONResponse) VisitGetDeprecatedEndpointResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1830,7 +1879,7 @@ type GetDeprecatedField200JSONResponse struct {
 func (response GetDeprecatedField200JSONResponse) VisitGetDeprecatedFieldResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1863,12 +1912,18 @@ type GetDeprecatedParamsOldId200JSONResponse struct {
 func (response GetDeprecatedParamsOldId200JSONResponse) VisitGetDeprecatedParamsOldIdResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if response.Headers.XOldToken != nil {
-		w.Header().Set("X-Old-Token", fmt.Sprint(*response.Headers.XOldToken))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "X-Old-Token", *response.Headers.XOldToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header X-Old-Token: %w", err)
+			}
+			w.Header().Set("X-Old-Token", v)
+		}
 	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
@@ -1888,7 +1943,7 @@ type PostDeprecatedRequestBody200JSONResponse DeprecatedObject
 func (response PostDeprecatedRequestBody200JSONResponse) VisitPostDeprecatedRequestBodyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -1909,15 +1964,27 @@ type GetLegacy200JSONResponse struct{ LegacyResponseJSONResponse }
 func (response GetLegacy200JSONResponse) VisitGetLegacyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response.Body); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response.Body); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/json")
 	if response.Headers.XCorrelationId != nil {
-		w.Header().Set("X-Correlation-Id", fmt.Sprint(*response.Headers.XCorrelationId))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "X-Correlation-Id", *response.Headers.XCorrelationId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header X-Correlation-Id: %w", err)
+			}
+			w.Header().Set("X-Correlation-Id", v)
+		}
 	}
 	if response.Headers.XOldTrace != nil {
-		w.Header().Set("X-Old-Trace", fmt.Sprint(*response.Headers.XOldTrace))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "X-Old-Trace", *response.Headers.XOldTrace, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header X-Old-Trace: %w", err)
+			}
+			w.Header().Set("X-Old-Trace", v)
+		}
 	}
 	w.WriteHeader(200)
 	_, err := buf.WriteTo(w)
@@ -1955,8 +2022,11 @@ type StrictServerInterface interface {
 	GetLegacy(ctx context.Context, request GetLegacyRequestObject) (GetLegacyResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -1975,6 +2045,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -1989,13 +2069,13 @@ func (sh *strictHandler) PostClients(w http.ResponseWriter, r *http.Request) {
 	var request PostClientsRequestObject
 
 	var body PostClientsJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PostClients(ctx, request.(PostClientsRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -2019,7 +2099,7 @@ func (sh *strictHandler) PostClients(w http.ResponseWriter, r *http.Request) {
 func (sh *strictHandler) GetDeprecatedEndpoint(w http.ResponseWriter, r *http.Request) {
 	var request GetDeprecatedEndpointRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetDeprecatedEndpoint(ctx, request.(GetDeprecatedEndpointRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -2044,13 +2124,13 @@ func (sh *strictHandler) PostDeprecatedEndpointWithNonDeprecatedBody(w http.Resp
 	var request PostDeprecatedEndpointWithNonDeprecatedBodyRequestObject
 
 	var body PostDeprecatedEndpointWithNonDeprecatedBodyJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PostDeprecatedEndpointWithNonDeprecatedBody(ctx, request.(PostDeprecatedEndpointWithNonDeprecatedBodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -2076,7 +2156,7 @@ func (sh *strictHandler) GetDeprecatedField(w http.ResponseWriter, r *http.Reque
 
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetDeprecatedField(ctx, request.(GetDeprecatedFieldRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -2103,7 +2183,7 @@ func (sh *strictHandler) GetDeprecatedParamsOldId(w http.ResponseWriter, r *http
 	request.OldId = oldId
 	request.Params = params
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetDeprecatedParamsOldId(ctx, request.(GetDeprecatedParamsOldIdRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -2128,13 +2208,13 @@ func (sh *strictHandler) PostDeprecatedRequestBody(w http.ResponseWriter, r *htt
 	var request PostDeprecatedRequestBodyRequestObject
 
 	var body PostDeprecatedRequestBodyJSONRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	if err := runtime.BindJSONBody(r, &body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
 	}
 	request.Body = &body
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.PostDeprecatedRequestBody(ctx, request.(PostDeprecatedRequestBodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -2158,7 +2238,7 @@ func (sh *strictHandler) PostDeprecatedRequestBody(w http.ResponseWriter, r *htt
 func (sh *strictHandler) GetLegacy(w http.ResponseWriter, r *http.Request) {
 	var request GetLegacyRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetLegacy(ctx, request.(GetLegacyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

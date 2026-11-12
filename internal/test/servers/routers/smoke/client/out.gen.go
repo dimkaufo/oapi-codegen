@@ -6,21 +6,21 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams2" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body = string
 
-// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostObject.
+// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostObject for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
 // PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
@@ -238,7 +238,7 @@ func NewGetGetMultibodyRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/get-multibody")
+	operationPath := "/get-multibody"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -265,7 +265,7 @@ func NewGetObjectRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/object")
+	operationPath := "/object"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -286,7 +286,7 @@ func NewGetObjectRequest(server string) (*http.Request, error) {
 // NewPostPostMultibodyRequestWithApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody calls the generic PostPostMultibody builder with application/ld+json; profile="https://www.w3.org/ns/activitystreams" body
 func NewPostPostMultibodyRequestWithApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody(server string, body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -297,7 +297,7 @@ func NewPostPostMultibodyRequestWithApplicationLdPlusJSONProfilehttpswwwW3Orgnsa
 // NewPostPostMultibodyRequestWithApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body calls the generic PostPostMultibody builder with application/ld+json; profile="https://www.w3.org/ns/activitystreams2" body
 func NewPostPostMultibodyRequestWithApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body(server string, body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2RequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +314,7 @@ func NewPostPostMultibodyRequestWithBody(server string, contentType string, body
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/post-multibody")
+	operationPath := "/post-multibody"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -337,7 +337,7 @@ func NewPostPostMultibodyRequestWithBody(server string, contentType string, body
 // NewPostPostObjectRequestWithApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody calls the generic PostPostObject builder with application/ld+json; profile="https://www.w3.org/ns/activitystreams" body
 func NewPostPostObjectRequestWithApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody(server string, body PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,7 @@ func NewPostPostObjectRequestWithBody(server string, contentType string, body io
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/post-object")
+	operationPath := "/post-object"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -702,14 +702,14 @@ func ParseGetGetMultibodyResponse(rsp *http.Response) (*GetGetMultibodyResponse,
 	switch {
 	case rsp.Header.Get("Content-Type") == "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"" && rsp.StatusCode == 200:
 		var dest string
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationldJSONProfilehttpswwwW3Orgnsactivitystreams200 = &dest
 
 	case rsp.Header.Get("Content-Type") == "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams2\"" && rsp.StatusCode == 200:
 		var dest string
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationldJSONProfilehttpswwwW3Orgnsactivitystreams2200 = &dest
@@ -735,7 +735,7 @@ func ParseGetObjectResponse(rsp *http.Response) (*GetObjectResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest string
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationldJSONProfilehttpswwwW3Orgnsactivitystreams200 = &dest

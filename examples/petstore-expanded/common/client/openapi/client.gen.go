@@ -6,8 +6,6 @@ package openapi
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -276,7 +274,7 @@ func NewFindPetsRequest(server string, params *FindPetsParams) (*http.Request, e
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/pets")
+	operationPath := "/pets"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -336,7 +334,7 @@ func NewFindPetsRequest(server string, params *FindPetsParams) (*http.Request, e
 // NewAddPetRequest calls the generic AddPet builder with application/json body
 func NewAddPetRequest(server string, body AddPetJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +351,7 @@ func NewAddPetRequestWithBody(server string, contentType string, body io.Reader)
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/pets")
+	operationPath := "/pets"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -389,7 +387,7 @@ func NewDeletePetRequest(server string, id int64) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/pets/%s", pathParam0)
+	operationPath := "/pets/" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -423,7 +421,7 @@ func NewFindPetByIDRequest(server string, id int64) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/pets/%s", pathParam0)
+	operationPath := "/pets/" + pathParam0
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -813,14 +811,14 @@ func ParseFindPetsResponse(rsp *http.Response) (*FindPetsResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest []Pet
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSONDefault = &dest
@@ -846,14 +844,14 @@ func ParseAddPetResponse(rsp *http.Response) (*AddPetResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Pet
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSONDefault = &dest
@@ -877,9 +875,12 @@ func ParseDeletePetResponse(rsp *http.Response) (*DeletePetResponse, error) {
 	}
 
 	switch {
+	case rsp.StatusCode == 204:
+		break // No content-type
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSONDefault = &dest
@@ -905,14 +906,14 @@ func ParseFindPetByIDResponse(rsp *http.Response) (*FindPetByIDResponse, error) 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest Pet
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest Error
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSONDefault = &dest

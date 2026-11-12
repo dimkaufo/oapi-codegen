@@ -8,7 +8,6 @@ import (
 	"compress/flate"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -18,10 +17,11 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/kataras/iris/v12"
+	"github.com/oapi-codegen/runtime"
 )
 
 // Test defines model for Test.
-type Test = map[string]interface{}
+type Test = map[string]any
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
 type RequestEditorFn func(ctx context.Context, req *http.Request) error
@@ -123,7 +123,7 @@ func NewTestRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/test")
+	operationPath := "/test"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -273,21 +273,21 @@ func ParseTestResponse(rsp *http.Response) (*TestResponse, error) {
 	switch {
 	case rsp.Header.Get("Content-Type") == "application/json" && rsp.StatusCode == 200:
 		var dest Test
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
 
 	case rsp.Header.Get("Content-Type") == "application/json; profile=\"Bar\"" && rsp.StatusCode == 200:
 		var dest Test
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationjsonProfileBar200 = &dest
 
 	case rsp.Header.Get("Content-Type") == "application/json; profile=\"Foo\"" && rsp.StatusCode == 200:
 		var dest Test
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.ApplicationjsonProfileFoo200 = &dest
@@ -331,6 +331,9 @@ func RegisterHandlers(router *iris.Application, si ServerInterface) {
 
 // RegisterHandlersWithOptions creates http.Handler with additional options
 func RegisterHandlersWithOptions(router *iris.Application, si ServerInterface, options IrisServerOptions) {
+	for _, m := range options.Middlewares {
+		router.Use(m)
+	}
 
 	wrapper := ServerInterfaceWrapper{
 		Handler: si,
@@ -382,8 +385,11 @@ type StrictServerInterface interface {
 	Test(ctx context.Context, request TestRequestObject) (TestResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx iris.Context, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx iris.Context, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares}
@@ -398,7 +404,7 @@ type strictHandler struct {
 func (sh *strictHandler) Test(ctx iris.Context) {
 	var request TestRequestObject
 
-	handler := func(ctx iris.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx iris.Context, request any) (any, error) {
 		return sh.ssi.Test(ctx, request.(TestRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -408,15 +414,15 @@ func (sh *strictHandler) Test(ctx iris.Context) {
 	response, err := handler(ctx, request)
 
 	if err != nil {
-		ctx.StopWithError(http.StatusBadRequest, err)
+		ctx.StopWithError(http.StatusInternalServerError, err)
 		return
 	} else if validResponse, ok := response.(TestResponseObject); ok {
 		if err := validResponse.VisitTestResponse(ctx); err != nil {
-			ctx.StopWithError(http.StatusBadRequest, err)
+			ctx.StopWithError(http.StatusInternalServerError, err)
 			return
 		}
 	} else if response != nil {
-		ctx.Writef("Unexpected response type: %T", response)
+		ctx.StopWithError(http.StatusInternalServerError, fmt.Errorf("unexpected response type: %T", response))
 		return
 	}
 }
@@ -428,8 +434,7 @@ func (sh *strictHandler) Test(ctx iris.Context) {
 var swaggerSpec = []string{
 	"rM8xSwQxEAXgvyJPy3BZtYvYWAj2ltfEOOvlyM0MyVjIsv9dEhcWLMVp3jTvY2ZBkosKE1tDWNDSiS5x",
 	"rK/UrKd9KSFA3s6UDOu6OmSeBYE/S3EQJY6aEXB/mA63cNBopyF424gPGiFKNVoWfnlH+PEdKjUVbjQa",
-	"d9PUIwkb8ehE1ZLTaPlzE96P7NtNpRkB137/wm8v+OH3a38TD1daZc6FHo94ivWIfzafRf5gbvMdAAD/",
-	"/w==",
+	"d9PUIwkb8ehE1ZLTaPlzE96P7NtNpRkB137/wm8v+OH3a38TD1daZc6FHo94ivWIfzafRf5gbvM9AA==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

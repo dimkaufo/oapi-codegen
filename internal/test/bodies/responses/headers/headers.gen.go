@@ -9,6 +9,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/oapi-codegen/runtime"
 )
 
 // ServerInterface represents all server handlers.
@@ -148,6 +149,7 @@ func HandlerWithOptions(si ServerInterface, options GorillaServerOptions) http.H
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
+
 	wrapper := ServerInterfaceWrapper{
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,
@@ -179,11 +181,17 @@ func (response GetPing200TextResponse) VisitGetPingResponse(w http.ResponseWrite
 
 	w.Header().Set("Content-Type", "text/plain")
 	if response.Headers.MyHeader != nil {
-		w.Header().Set("MyHeader", fmt.Sprint(*response.Headers.MyHeader))
+		{
+			v, err := runtime.StyleParamWithOptions("simple", false, "MyHeader", *response.Headers.MyHeader, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationHeader, Type: "string", Format: ""})
+			if err != nil {
+				return fmt.Errorf("error styling response header MyHeader: %w", err)
+			}
+			w.Header().Set("MyHeader", v)
+		}
 	}
 	w.WriteHeader(200)
 
-	_, err := w.Write([]byte(response.Body))
+	_, err := w.Write([]byte(fmt.Sprint(response.Body)))
 	return err
 }
 
@@ -194,8 +202,11 @@ type StrictServerInterface interface {
 	GetPing(ctx context.Context, request GetPingRequestObject) (GetPingResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 type StrictHTTPServerOptions struct {
 	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
@@ -214,6 +225,16 @@ func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareF
 }
 
 func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	if options.RequestErrorHandlerFunc == nil {
+		options.RequestErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		}
+	}
+	if options.ResponseErrorHandlerFunc == nil {
+		options.ResponseErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
+	}
 	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
 }
 
@@ -227,7 +248,7 @@ type strictHandler struct {
 func (sh *strictHandler) GetPing(w http.ResponseWriter, r *http.Request) {
 	var request GetPingRequestObject
 
-	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request any) (any, error) {
 		return sh.ssi.GetPing(ctx, request.(GetPingRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

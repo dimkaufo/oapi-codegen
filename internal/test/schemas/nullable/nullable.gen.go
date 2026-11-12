@@ -6,7 +6,6 @@ package schemasnullable
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/nullable"
+	"github.com/oapi-codegen/runtime"
 )
 
 // ComplexOptionalNullable Complex, optional and nullable
@@ -35,6 +35,15 @@ type ComplexRequiredNullable struct {
 // Container defines model for Container.
 type Container struct {
 	MayBeNull []nullable.Nullable[string] `json:"may-be-null"`
+}
+
+// DecoratableValue defines model for DecoratableValue.
+type DecoratableValue = string
+
+// DecoratedRef defines model for DecoratedRef.
+type DecoratedRef struct {
+	OptionalNullableRef nullable.Nullable[string] `json:"optional_nullable_ref,omitempty"`
+	RequiredNullableRef nullable.Nullable[string] `json:"required_nullable_ref"`
 }
 
 // PatchRequest A request to patch an existing user object.
@@ -181,7 +190,7 @@ func (c *Client) ExamplePatch(ctx context.Context, body ExamplePatchJSONRequestB
 // NewExamplePatchRequest calls the generic ExamplePatch builder with application/json body
 func NewExamplePatchRequest(server string, body ExamplePatchJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
+	buf, err := runtime.JSONMarshal(body)
 	if err != nil {
 		return nil, err
 	}
@@ -198,7 +207,7 @@ func NewExamplePatchRequestWithBody(server string, contentType string, body io.R
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/example")
+	operationPath := "/example"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -353,7 +362,6 @@ type ServerInterface interface {
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
-
 type Unimplemented struct{}
 
 // (PATCH /example)
@@ -491,6 +499,7 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 			http.Error(w, err.Error(), http.StatusBadRequest)
 		}
 	}
+
 	wrapper := ServerInterfaceWrapper{
 		Handler:            si,
 		HandlerMiddlewares: options.Middlewares,

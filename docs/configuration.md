@@ -10,7 +10,7 @@ This page is a structural overview. The authoritative, always-current reference 
 To get the IDE experience, add this line to the top of your configuration file:
 
 ```yaml
-# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.7.2/configuration-schema.json
+# yaml-language-server: $schema=https://raw.githubusercontent.com/oapi-codegen/oapi-codegen/v2.8.2/configuration-schema.json
 package: api
 # ...
 ```
@@ -32,6 +32,7 @@ generate:
   echo-server: false
   echo5-server: false      # requires Go 1.25+
   fiber-server: false
+  fiber-v3-server: false   # requires Go 1.25+
   gin-server: false
   gorilla-server: false
   iris-server: false
@@ -46,7 +47,8 @@ generate:
 # behavior when a bug fix or improvement changes generated output.
 # See <a href="https://pkg.go.dev/github.com/oapi-codegen/oapi-codegen/v2/pkg/codegen#CompatibilityOptions">CompatibilityOptions</a>
 compatibility:
-  old-merge-schemas: false
+  schema-merging-behavior: v2   # v1, v2 or v3: how allOf, anyOf and oneOf become Go types; see <a href="schema-merging.md">schema-merging.md</a>
+  old-merge-schemas: false      # deprecated: an alias for schema-merging-behavior: v1
   old-allof-sibling-merging: false
   old-enum-conflicts: false
   old-aliasing: false
@@ -61,6 +63,8 @@ compatibility:
   disable-enum-value-conflict-resolution: false
   headers-implicitly-required: false
   enable-auth-scopes-on-context: false
+  sort-handler-registrations: false
+  overlays-use-yaml-jsonpath: false  # read every overlay target in the pre-v2.9.0 JSONPath dialect instead of RFC 9535 (whole overlay, no per-target detection)
 
 # Output modification options
 # See <a href="https://pkg.go.dev/github.com/oapi-codegen/oapi-codegen/v2/pkg/codegen#OutputOptions">OutputOptions</a>
@@ -85,6 +89,7 @@ output-options:
   prefer-skip-optional-pointer-on-container-types: false
   skip-enum-validate: false
   skip-enum-via-oneof: false
+  lenient-union-accessors: false   # schema-merging-behavior v3 only: see <a href="schema-merging.md#variants-with-additionalproperties-false">schema-merging.md</a>
   generate-types-for-anonymous-schemas: false
   # How OpenAPI type/format combinations map to Go types; user-specified
   # mappings are merged on top of these defaults.
@@ -123,11 +128,40 @@ output-options:
         json:      { type: json.RawMessage, import: encoding/json }
         uuid:      { type: openapi_types.UUID }
         binary:    { type: openapi_types.File }
+  # Superseded by struct-tags: a `yaml` entry there takes precedence over this flag
   yaml-tags: false
+  # Configure generated struct tags. Entries are merged by name on top of the
+  # defaults shown below, so redefining `json` replaces its template while new
+  # names add tags. Values are Go text/templates over the variables
+  # .FieldName, .IsOptional, .OmitEmpty, .OmitZero and .NeedsFormTag; a
+  # template that renders empty suppresses the tag on that field. Tags are
+  # emitted in alphabetical order. Per-field x-oapi-codegen-extra-tags and
+  # x-go-json-ignore are applied on top of the rendered tags.
+  struct-tags:
+    tags:
+      - name: json
+        template: '{{.FieldName}}{{if .OmitEmpty}},omitempty{{end}}{{if .OmitZero}},omitzero{{end}}'
+      - name: form
+        template: '{{if .NeedsFormTag}}{{.FieldName}}{{if .OmitEmpty}},omitempty{{end}}{{end}}'
+      # Additional tags can be added, e.g.:
+      # - name: db
+      #   template: '{{.FieldName}}'
   client-response-bytes-function: false
   skip-client-response-content-type: false
   skip-response-body-getters: false
   streaming-content-types: []
+  # Short names for media types, used in generated type names. Keys are the
+  # tag spliced into type names (e.g. the JSON in FindPetsJSONRequestBody),
+  # values are regex patterns matched against request/response media types.
+  # Matching media types get models generated and named with the short name.
+  # User entries are merged on top of these defaults by key replacement
+  # (an empty list disables a key); unmatched media types keep the
+  # remaining built-in behavior.
+  content-types:
+    JSON:      ['^application/json$']
+    Formdata:  ['^application/x-www-form-urlencoded$']
+    Multipart: ['^multipart/']
+    Text:      ['^text/plain$']
   user-templates: {}
   # OpenAPI Overlay applied to the spec before generation
   overlay:
@@ -137,6 +171,12 @@ output-options:
 # External reference to Go package mapping, used when
 # <a href="../README.md#import-mapping">splitting specs across multiple packages</a>
 import-mapping: {}
+
+# Remote documents that external $refs may be fetched from while the spec is
+# loaded: each entry is a $ref URL without its fragment, or "*" for any URL.
+# Empty by default: remote references are refused and only local files are
+# followed. See <a href="../README.md#remote-references">remote references</a>
+allow-remote-refs-from: []
 
 # Additional Go imports to add to the generated code
 additional-imports: []

@@ -6,7 +6,6 @@ package echo
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,15 +13,16 @@ import (
 	"strings"
 
 	"github.com/labstack/echo/v4"
+	"github.com/oapi-codegen/runtime"
 )
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
-// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines parameters for PostPostMultibody.
+// PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams2" ContentType.
 type PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Body = string
 
-// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines parameters for PostPostObject.
+// PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody defines body for PostPostObject for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
 type PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsBody = string
 
 // PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody defines body for PostPostMultibody for application/ld+json; profile="https://www.w3.org/ns/activitystreams" ContentType.
@@ -138,10 +138,10 @@ func RegisterHandlersWithOptions(router EchoRouter, si ServerInterface, options 
 		Handler: si,
 	}
 
-	router.GET(options.BaseURL+"/get-multibody", wrapper.GetGetMultibody, options.OperationMiddlewares["GetGetMultibody"]...)
 	router.GET(options.BaseURL+"/object", wrapper.GetObject, options.OperationMiddlewares["GetObject"]...)
-	router.POST(options.BaseURL+"/post-multibody", wrapper.PostPostMultibody, options.OperationMiddlewares["PostPostMultibody"]...)
+	router.GET(options.BaseURL+"/get-multibody", wrapper.GetGetMultibody, options.OperationMiddlewares["GetGetMultibody"]...)
 	router.POST(options.BaseURL+"/post-object", wrapper.PostPostObject, options.OperationMiddlewares["PostPostObject"]...)
+	router.POST(options.BaseURL+"/post-multibody", wrapper.PostPostMultibody, options.OperationMiddlewares["PostPostMultibody"]...)
 
 }
 
@@ -157,7 +157,7 @@ type GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystream
 func (response GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsResponse) VisitGetGetMultibodyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"")
@@ -171,7 +171,7 @@ type GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystream
 func (response GetGetMultibody200ApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2Response) VisitGetGetMultibodyResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams2\"")
@@ -192,7 +192,7 @@ type GetObject200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRespo
 func (response GetObject200ApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsResponse) VisitGetObjectResponse(w http.ResponseWriter) error {
 
 	var buf bytes.Buffer
-	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+	if err := runtime.JSONMarshalWrite(&buf, response); err != nil {
 		return err
 	}
 	w.Header().Set("Content-Type", "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"")
@@ -234,8 +234,11 @@ type StrictServerInterface interface {
 	PostPostObject(ctx context.Context, request PostPostObjectRequestObject) (PostPostObjectResponseObject, error)
 }
 
-type StrictHandlerFunc func(ctx echo.Context, request any) (any, error)
-type StrictMiddlewareFunc func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
+// StrictHandlerFunc and StrictMiddlewareFunc are type aliases rather than
+// distinct named types, so middleware written against one generated package
+// can be shared with every other generated package using the same framework.
+type StrictHandlerFunc = func(ctx echo.Context, request any) (any, error)
+type StrictMiddlewareFunc = func(f StrictHandlerFunc, operationID string) StrictHandlerFunc
 
 func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
 	return &strictHandler{ssi: ssi, middlewares: middlewares}
@@ -250,7 +253,7 @@ type strictHandler struct {
 func (sh *strictHandler) GetGetMultibody(ctx echo.Context) error {
 	var request GetGetMultibodyRequestObject
 
-	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx echo.Context, request any) (any, error) {
 		return sh.ssi.GetGetMultibody(ctx.Request().Context(), request.(GetGetMultibodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -273,7 +276,7 @@ func (sh *strictHandler) GetGetMultibody(ctx echo.Context) error {
 func (sh *strictHandler) GetObject(ctx echo.Context) error {
 	var request GetObjectRequestObject
 
-	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx echo.Context, request any) (any, error) {
 		return sh.ssi.GetObject(ctx.Request().Context(), request.(GetObjectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -298,7 +301,24 @@ func (sh *strictHandler) PostPostMultibody(ctx echo.Context) error {
 
 	if strings.HasPrefix(ctx.Request().Header.Get("Content-Type"), "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams\"") {
 		var body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody
-		if err := ctx.Bind(&body); err != nil {
+		var err error
+		if binder, ok := ctx.Echo().Binder.(*echo.DefaultBinder); ok {
+			// A request validator built on kin-openapi's openapi3filter with
+			// KeepValidatedValue leaves the value it validated on the body. Bind
+			// that value, matching member names exactly, so the handler receives
+			// what was validated instead of a second, case-insensitive decode.
+			// Otherwise bind only the request body, so that path and query
+			// parameters are not also bound into the body struct.
+			if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+				err = binder.BindBody(ctx, &body)
+			}
+		} else {
+			// A custom binder is installed on the Echo instance; defer to it
+			// entirely, since echo.Binder does not expose body-only binding and
+			// the binder may do more than decode (for example call ctx.Validate).
+			err = ctx.Bind(&body)
+		}
+		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				return err
 			}
@@ -308,7 +328,24 @@ func (sh *strictHandler) PostPostMultibody(ctx echo.Context) error {
 	}
 	if strings.HasPrefix(ctx.Request().Header.Get("Content-Type"), "application/ld+json; profile=\"https://www.w3.org/ns/activitystreams2\"") {
 		var body PostPostMultibodyApplicationLdPlusJSONProfilehttpswwwW3Orgnsactivitystreams2RequestBody
-		if err := ctx.Bind(&body); err != nil {
+		var err error
+		if binder, ok := ctx.Echo().Binder.(*echo.DefaultBinder); ok {
+			// A request validator built on kin-openapi's openapi3filter with
+			// KeepValidatedValue leaves the value it validated on the body. Bind
+			// that value, matching member names exactly, so the handler receives
+			// what was validated instead of a second, case-insensitive decode.
+			// Otherwise bind only the request body, so that path and query
+			// parameters are not also bound into the body struct.
+			if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+				err = binder.BindBody(ctx, &body)
+			}
+		} else {
+			// A custom binder is installed on the Echo instance; defer to it
+			// entirely, since echo.Binder does not expose body-only binding and
+			// the binder may do more than decode (for example call ctx.Validate).
+			err = ctx.Bind(&body)
+		}
+		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				return err
 			}
@@ -317,7 +354,7 @@ func (sh *strictHandler) PostPostMultibody(ctx echo.Context) error {
 		}
 	}
 
-	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx echo.Context, request any) (any, error) {
 		return sh.ssi.PostPostMultibody(ctx.Request().Context(), request.(PostPostMultibodyRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
@@ -341,7 +378,24 @@ func (sh *strictHandler) PostPostObject(ctx echo.Context) error {
 	var request PostPostObjectRequestObject
 
 	var body PostPostObjectApplicationLdPlusJSONProfilehttpswwwW3OrgnsactivitystreamsRequestBody
-	if err := ctx.Bind(&body); err != nil {
+	var err error
+	if binder, ok := ctx.Echo().Binder.(*echo.DefaultBinder); ok {
+		// A request validator built on kin-openapi's openapi3filter with
+		// KeepValidatedValue leaves the value it validated on the body. Bind
+		// that value, matching member names exactly, so the handler receives
+		// what was validated instead of a second, case-insensitive decode.
+		// Otherwise bind only the request body, so that path and query
+		// parameters are not also bound into the body struct.
+		if vb, ok := ctx.Request().Body.(interface{ ValidatedValue() any }); !ok || runtime.BindJSONValue(vb.ValidatedValue(), &body) != nil {
+			err = binder.BindBody(ctx, &body)
+		}
+	} else {
+		// A custom binder is installed on the Echo instance; defer to it
+		// entirely, since echo.Binder does not expose body-only binding and
+		// the binder may do more than decode (for example call ctx.Validate).
+		err = ctx.Bind(&body)
+	}
+	if err != nil {
 		if !errors.Is(err, io.EOF) {
 			return err
 		}
@@ -349,7 +403,7 @@ func (sh *strictHandler) PostPostObject(ctx echo.Context) error {
 		request.Body = &body
 	}
 
-	handler := func(ctx echo.Context, request interface{}) (interface{}, error) {
+	handler := func(ctx echo.Context, request any) (any, error) {
 		return sh.ssi.PostPostObject(ctx.Request().Context(), request.(PostPostObjectRequestObject))
 	}
 	for _, middleware := range sh.middlewares {

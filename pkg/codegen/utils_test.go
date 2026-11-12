@@ -14,6 +14,8 @@
 package codegen
 
 import (
+	"fmt"
+	"net/url"
 	"testing"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -368,6 +370,10 @@ func TestSwaggerUriToEchoUri(t *testing.T) {
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToEchoUri("/path/{;arg*}/foo"))
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToEchoUri("/path/{?arg}/foo"))
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToEchoUri("/path/{?arg*}/foo"))
+
+	// Make sure literal colons are escaped (issue #1726)
+	assert.Equal(t, `/path\:foo`, SwaggerUriToEchoUri("/path:foo"))
+	assert.Equal(t, `/path/:arg\:foo`, SwaggerUriToEchoUri("/path/{arg}:foo"))
 }
 
 func TestSwaggerUriToGinUri(t *testing.T) {
@@ -385,6 +391,10 @@ func TestSwaggerUriToGinUri(t *testing.T) {
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToGinUri("/path/{;arg*}/foo"))
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToGinUri("/path/{?arg}/foo"))
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToGinUri("/path/{?arg*}/foo"))
+
+	// Make sure literal colons are escaped (issue #1726)
+	assert.Equal(t, `/path\:foo`, SwaggerUriToGinUri("/path:foo"))
+	assert.Equal(t, `/path/:arg\:foo`, SwaggerUriToGinUri("/path/{arg}:foo"))
 }
 
 func TestSwaggerUriToGorillaUri(t *testing.T) { // TODO
@@ -419,6 +429,10 @@ func TestSwaggerUriToFiberUri(t *testing.T) {
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToFiberUri("/path/{;arg*}/foo"))
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToFiberUri("/path/{?arg}/foo"))
 	assert.Equal(t, "/path/:arg/foo", SwaggerUriToFiberUri("/path/{?arg*}/foo"))
+
+	// Make sure literal colons are escaped (issue #1726)
+	assert.Equal(t, `/path\:foo`, SwaggerUriToFiberUri("/path:foo"))
+	assert.Equal(t, `/path/:arg\:foo`, SwaggerUriToFiberUri("/path/{arg}:foo"))
 }
 
 func TestSwaggerUriToChiUri(t *testing.T) {
@@ -461,6 +475,14 @@ func TestSwaggerUriToStdHttpUriUri(t *testing.T) {
 
 	// Go keywords are valid ServeMux wildcard names and should not be prefixed
 	assert.Equal(t, "/path/{type}", SwaggerUriToStdHttpUri("/path/{type}"))
+
+	// OpenAPI paths with a trailing slash mean exactly that path, but a
+	// ServeMux pattern ending in '/' matches the whole subtree — and
+	// overlapping subtree patterns panic at registration. Anchor with {$}.
+	// Please see https://github.com/oapi-codegen/oapi-codegen/issues/2065
+	assert.Equal(t, "/path/{$}", SwaggerUriToStdHttpUri("/path/"))
+	assert.Equal(t, "/api/test/{id}/test2/{$}", SwaggerUriToStdHttpUri("/api/test/{id}/test2/"))
+	assert.Equal(t, "/api/test/test3/{$}", SwaggerUriToStdHttpUri("/api/test/test3/"))
 }
 
 func TestOrderedParamsFromUri(t *testing.T) {
@@ -518,9 +540,122 @@ func TestSortParamsByPath(t *testing.T) {
 	})
 }
 
-func TestReplacePathParamsWithStr(t *testing.T) {
-	result := ReplacePathParamsWithStr("/path/{param1}/{.param2}/{;param3*}/foo")
-	assert.EqualValues(t, "/path/%s/%s/%s/foo", result)
+func TestGenPathString(t *testing.T) {
+	tests := []struct {
+		uri  string
+		want string
+	}{
+		{
+			uri:  "/test/{param1}/{.param2}/{;param3*}/foo",
+			want: `"/test/" + pathParam0 + "/" + pathParam1 + "/" + pathParam2 + "/foo"`,
+		},
+		{
+			uri:  "/test/{param}",
+			want: `"/test/" + pathParam0`,
+		},
+		{
+			uri:  "/test/{param}/test2/{param2}",
+			want: `"/test/" + pathParam0 + "/test2/" + pathParam1`,
+		},
+		{
+			uri:  "/test/test2",
+			want: `"/test/test2"`,
+		},
+		{
+			uri:  "test",
+			want: `"test"`,
+		},
+		{
+			uri:  "{param}/test",
+			want: `pathParam0 + "/test"`,
+		},
+		{
+			uri:  "/{param}/test/",
+			want: `"/" + pathParam0 + "/test/"`,
+		},
+		{
+			uri:  "/",
+			want: `"/"`,
+		},
+		{
+			uri:  "",
+			want: `""`,
+		},
+		// Percent signs are literal path characters, not format verbs.
+		{
+			uri:  "/test/%20/{param}",
+			want: `"/test/%20/" + pathParam0`,
+		},
+		{
+			uri:  "/test/100%/{param}",
+			want: `"/test/100%/" + pathParam0`,
+		},
+		{
+			uri:  "/test/%dpercent",
+			want: `"/test/%dpercent"`,
+		},
+		// A literal "%s" in the path must not be mistaken for a parameter.
+		{
+			uri:  "/test/literal%s/{param}",
+			want: `"/test/literal%s/" + pathParam0`,
+		},
+		// Characters that are significant in Go string literals must be escaped.
+		{
+			uri:  `/test/quo"te/{param}`,
+			want: `"/test/quo\"te/" + pathParam0`,
+		},
+		{
+			uri:  `/test/back\slash/{param}`,
+			want: `"/test/back\\slash/" + pathParam0`,
+		},
+		// A repeated parameter reuses the variable bound to its first occurrence,
+		// matching the deduplication SortParamsByPath applies.
+		{
+			uri:  "/orgs/{id}/mirror/{id}",
+			want: `"/orgs/" + pathParam0 + "/mirror/" + pathParam0`,
+		},
+		{
+			uri:  "/admin/realms/{realm}/clients/{client-uuid}/roles/{role-name}/composites/clients/{client-uuid}",
+			want: `"/admin/realms/" + pathParam0 + "/clients/" + pathParam1 + "/roles/" + pathParam2 + "/composites/clients/" + pathParam1`,
+		},
+		{
+			uri:  "/test/{param}/{other}/{param}/{other}",
+			want: `"/test/" + pathParam0 + "/" + pathParam1 + "/" + pathParam0 + "/" + pathParam1`,
+		},
+		// Prefixed and exploded forms refer to the same underlying parameter.
+		{
+			uri:  "/test/{param}/{.param}/{;param*}",
+			want: `"/test/" + pathParam0 + "/" + pathParam0 + "/" + pathParam0`,
+		},
+	}
+
+	for _, tst := range tests {
+		result := GenPathString(tst.uri, "pathParam")
+		assert.Equal(t, tst.want, result)
+	}
+}
+
+func Benchmark_concatPath1param(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	pathParam0 := "pathParam0"
+
+	for i := 0; i < b.N; i++ {
+		_ = "/test/" + pathParam0
+	}
+}
+
+func Benchmark_concatPath2param(b *testing.B) {
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	pathParam0 := "pathParam0"
+	pathParam1 := "pathParam1"
+
+	for i := 0; i < b.N; i++ {
+		_ = "/test/" + pathParam0 + "/test2/" + pathParam1
+	}
 }
 
 func TestStringToGoStringValue(t *testing.T) {
@@ -711,6 +846,41 @@ func TestSchemaNameToTypeName(t *testing.T) {
 	}
 }
 
+// TestPathToTypeName_LeadingDigit covers issue #2555 (a path built from a
+// bare numeric HTTP status segment, e.g. ["400", "Errors"], must not
+// assemble into an invalid Go identifier) and its Unicode follow-on: the
+// leading-digit check must look at the first rune, not the first UTF-8
+// byte, or a path starting with a multi-byte Unicode digit keeps an
+// invalid leading rune.
+func TestPathToTypeName_LeadingDigit(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		path []string
+		want string
+	}{
+		"ascii digit": {
+			path: []string{"400", "Errors"},
+			want: "N400_Errors",
+		},
+		"multi-byte unicode digit": {
+			// U+0664 ARABIC-INDIC DIGIT FOUR is 2 bytes in UTF-8; indexing
+			// name[0] would read only the leading byte of that encoding,
+			// which is not itself a digit, and miss the prefix.
+			path: []string{"\u0664", "Errors"},
+			want: "N\u0664_Errors",
+		},
+		"non-digit leading rune is unaffected": {
+			path: []string{"Widget", "Errors"},
+			want: "Widget_Errors",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, PathToTypeName(tc.path))
+		})
+	}
+}
+
 func TestTypeDefinitionsEquivalent(t *testing.T) {
 	def1 := TypeDefinition{TypeName: "name", Schema: Schema{
 		OAPISchema: &openapi3.Schema{},
@@ -719,6 +889,174 @@ func TestTypeDefinitionsEquivalent(t *testing.T) {
 		OAPISchema: &openapi3.Schema{},
 	}}
 	assert.True(t, TypeDefinitionsEquivalent(def1, def2))
+}
+
+// TestTypeDefinitionsEquivalentIgnoresOrigin loads each spec with
+// IncludeOrigin, so the two compared schemas sit on different lines, and
+// compares the `product` properties of Client and CreateClientRequest.
+// See https://github.com/oapi-codegen/oapi-codegen/issues/2599
+func TestTypeDefinitionsEquivalentIgnoresOrigin(t *testing.T) {
+	tests := []struct {
+		name string
+		spec string
+		// files are served to the loader for external $refs, keyed by path.
+		files map[string]string
+		want  bool
+	}{
+		{
+			name: "inline enum",
+			spec: `
+openapi: 3.0.3
+info: {title: t, version: "1"}
+paths: {}
+components:
+  schemas:
+    Client:
+      type: object
+      properties:
+        product: {type: string, enum: [MANAGE, API], x-go-type-name: Product}
+    CreateClientRequest:
+      type: object
+      properties:
+        product: {type: string, enum: [MANAGE, API], x-go-type-name: Product}
+`,
+			want: true,
+		},
+		{
+			name: "nested schema",
+			spec: `
+openapi: 3.0.3
+info: {title: t, version: "1"}
+paths: {}
+components:
+  schemas:
+    Client:
+      type: object
+      properties:
+        product: {type: object, x-go-type-name: Product, properties: {city: {type: string}}}
+    CreateClientRequest:
+      type: object
+      properties:
+        product: {type: object, x-go-type-name: Product, properties: {city: {type: string}}}
+`,
+			want: true,
+		},
+		{
+			name: "recursive schema",
+			spec: `
+openapi: 3.0.3
+info: {title: t, version: "1"}
+paths: {}
+components:
+  schemas:
+    Node: {type: object, properties: {child: {$ref: '#/components/schemas/Node'}}}
+    Client:
+      type: object
+      properties:
+        product: {type: object, x-go-type-name: Product, properties: {node: {$ref: '#/components/schemas/Node'}}}
+    CreateClientRequest:
+      type: object
+      properties:
+        product: {type: object, x-go-type-name: Product, properties: {node: {$ref: '#/components/schemas/Node'}}}
+`,
+			want: true,
+		},
+		{
+			name: "same relative $ref resolving to different files",
+			spec: `
+openapi: 3.0.3
+info: {title: t, version: "1"}
+paths: {}
+components:
+  schemas:
+    Client: {$ref: './a/client.yaml#/Client'}
+    CreateClientRequest: {$ref: './b/request.yaml#/CreateClientRequest'}
+`,
+			files: map[string]string{
+				"a/client.yaml": `
+Client:
+  type: object
+  properties:
+    product: {type: object, x-go-type-name: Product, properties: {detail: {$ref: './common.yaml#/Detail'}}}
+`,
+				"a/common.yaml": `Detail: {type: string}`,
+				"b/request.yaml": `
+CreateClientRequest:
+  type: object
+  properties:
+    product: {type: object, x-go-type-name: Product, properties: {detail: {$ref: './common.yaml#/Detail'}}}
+`,
+				"b/common.yaml": `Detail: {type: integer}`,
+			},
+			want: false,
+		},
+		{
+			name: "3.1 $ref with a sibling keyword",
+			spec: `
+openapi: 3.1.0
+info: {title: t, version: "1"}
+paths: {}
+components:
+  schemas:
+    Base: {type: object, properties: {id: {type: string}}}
+    Client:
+      type: object
+      properties:
+        product: {type: object, x-go-type-name: Product, properties: {base: {$ref: '#/components/schemas/Base', type: [object, "null"]}}}
+    CreateClientRequest:
+      type: object
+      properties:
+        product: {type: object, x-go-type-name: Product, properties: {base: {$ref: '#/components/schemas/Base'}}}
+`,
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			loader := openapi3.NewLoader()
+			loader.IncludeOrigin = true
+			loader.ReadFromURIFunc = func(_ *openapi3.Loader, location *url.URL) ([]byte, error) {
+				data, ok := tt.files[location.Path]
+				if !ok {
+					return nil, fmt.Errorf("unexpected read of %q", location.Path)
+				}
+				return []byte(data), nil
+			}
+			swagger, err := loader.LoadFromDataWithPath([]byte(tt.spec), &url.URL{Path: "spec.yaml"})
+			require.NoError(t, err)
+
+			product := func(component string) TypeDefinition {
+				return TypeDefinition{TypeName: "Product", Schema: Schema{
+					OAPISchema: swagger.Components.Schemas[component].Value.Properties["product"].Value,
+				}}
+			}
+			assert.Equal(t, tt.want, TypeDefinitionsEquivalent(product("Client"), product("CreateClientRequest")))
+		})
+	}
+}
+
+// TestTypeDefinitionsEquivalentCycles compares two separately allocated
+// self-referencing schemas. A loaded spec shares one *Schema per $ref target,
+// so this builds the cycles by hand to exercise the cycle detection.
+func TestTypeDefinitionsEquivalentCycles(t *testing.T) {
+	node := func(line int, childType string) *openapi3.Schema {
+		s := &openapi3.Schema{
+			Type:   &openapi3.Types{"object"},
+			Origin: &openapi3.Origin{Key: &openapi3.Location{Line: line}},
+		}
+		s.Properties = openapi3.Schemas{
+			"self":  &openapi3.SchemaRef{Value: s},
+			"other": &openapi3.SchemaRef{Value: &openapi3.Schema{Type: &openapi3.Types{childType}}},
+		}
+		return s
+	}
+	def := func(s *openapi3.Schema) TypeDefinition {
+		return TypeDefinition{TypeName: "Node", Schema: Schema{OAPISchema: s}}
+	}
+
+	assert.True(t, TypeDefinitionsEquivalent(def(node(1, "string")), def(node(2, "string"))))
+	assert.False(t, TypeDefinitionsEquivalent(def(node(1, "string")), def(node(2, "integer"))))
 }
 
 func TestRefPathToObjName(t *testing.T) {
@@ -816,4 +1154,108 @@ func Test_replaceInitialism(t *testing.T) {
 			assert.Equalf(t, tt.want, replaceInitialism(tt.args.s), "replaceInitialism(%v)", tt.args.s)
 		})
 	}
+}
+
+func TestValidateStdHTTPPath(t *testing.T) {
+	tests := []struct {
+		path    string
+		wantErr bool
+	}{
+		{"/resources/{resourceId}", false},
+		{"/resources/{resourceId}/apply", false},
+		{"/resources/{resourceId}:apply", true},
+		{"/resources/prefix{resourceId}", true},
+		{"/resources/{resourceId}suffix", true},
+		{"/pets:validate", false}, // pure literal segment with colon is fine for ServeMux
+		{"/path/{arg1}/{arg2}/foo", false},
+	}
+	for _, tt := range tests {
+		err := ValidateStdHTTPPath(tt.path)
+		if tt.wantErr && err == nil {
+			t.Errorf("path %q: expected error", tt.path)
+		}
+		if !tt.wantErr && err != nil {
+			t.Errorf("path %q: unexpected error: %v", tt.path, err)
+		}
+	}
+}
+
+func TestGenerateRejectsMixedServeMuxPathParam(t *testing.T) {
+	spec := `openapi: 3.0.3
+info:
+  title: mixed path param
+  version: 1.0.0
+paths:
+  /resources/{resourceId}:apply:
+    post:
+      operationId: applyResource
+      parameters:
+        - name: resourceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Applied
+`
+	loader := openapi3.NewLoader()
+	swagger, err := loader.LoadFromData([]byte(spec))
+	require.NoError(t, err)
+
+	_, err = Generate(swagger, Configuration{
+		PackageName: "api",
+		Generate: GenerateOptions{
+			StdHTTPServer: true,
+			Models:        true,
+		},
+	})
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "mixes a path parameter")
+}
+
+func TestGenerateAllowsMixedServeMuxPathParamWhenFilteredOut(t *testing.T) {
+	spec := `openapi: 3.0.3
+info:
+  title: mixed path param filtered out
+  version: 1.0.0
+paths:
+  /resources/{resourceId}:apply:
+    post:
+      operationId: applyResource
+      tags: [excluded]
+      parameters:
+        - name: resourceId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Applied
+  /pets:
+    get:
+      operationId: listPets
+      responses:
+        "200":
+          description: OK
+`
+	loader := openapi3.NewLoader()
+	swagger, err := loader.LoadFromData([]byte(spec))
+	require.NoError(t, err)
+
+	// Tag filtering removes the only operation on the mixed segment but leaves
+	// the path key in the spec; no route is emitted for it, so generation must
+	// succeed.
+	_, err = Generate(swagger, Configuration{
+		PackageName: "api",
+		Generate: GenerateOptions{
+			StdHTTPServer: true,
+			Models:        true,
+		},
+		OutputOptions: OutputOptions{
+			ExcludeTags: []string{"excluded"},
+		},
+	})
+	require.NoError(t, err)
 }

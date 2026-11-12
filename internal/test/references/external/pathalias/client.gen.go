@@ -5,12 +5,12 @@ package pathalias
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/oapi-codegen/runtime"
 )
 
 // RequestEditorFn is the function signature for the RequestEditor callback function
@@ -137,7 +137,7 @@ func NewGetTestRequest(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/test")
+	operationPath := "/test"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -164,7 +164,7 @@ func NewGetTestAlias0Request(server string) (*http.Request, error) {
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/test2")
+	operationPath := "/test2"
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -365,7 +365,7 @@ func ParseGetTestResponse(rsp *http.Response) (*GetTestResponse, error) {
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest B
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
@@ -391,7 +391,7 @@ func ParseGetTestAlias0Response(rsp *http.Response) (*GetTestAlias0Response, err
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
 		var dest B
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+		if err := runtime.JSONUnmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON200 = &dest
